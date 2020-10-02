@@ -1,0 +1,115 @@
+---
+title: "Class 06: Assignment"
+author: "John Doll"
+date: "Feb 12 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggfortify)
+library(emmeans)
+library(gridExtra)
+library(knitr)
+```
+
+
+## Exercise
+
+An experiment was conducted to study the effects of temperature and type of oven on the life of a particular component. Four types of ovens and three temperature levels were used in the experiment. Twenty-four pieces were assigned randomly to each treatment (i.e. each combination of temperature and oven type) in equal sizes of 2 replications, and the data were recorded in `componentCast.csv` on the Hughes data repository.
+
+Describe the following:
+
+* **Experimental Units in this study?**  
+
+*The 24 different components*
+
+* **The factors of interest in this study?**
+
+*Temperature and oven type*
+
+* **How many factor levels are there?**
+
+*12, four oven types times 3 temperatures*
+
+* **What are the treatments?**
+
+*oven A, temp 500; oven A, temp 550; oven A, temp 600;*
+*oven B, temp 500; oven B, temp 550; oven B, temp 600;*
+*oven C, temp 500; oven C, temp 550; oven C, temp 600;*
+*oven D, temp 500; oven D, temp 550; oven D, temp 600;*
+
+* **What other steps were taken to control for nuisance variables and unexplained variability?**  
+
+*The pieces were randomly assigned to each treatment. The experiment was replicated twice. Each replication was the same size.*
+
+We begin our analysis by briefly looking at the data. 
+
+```{r}
+component <- read.csv("http://users.miamioh.edu/hughesmr/sta363/componentCast.csv")
+kable(head(component))
+```
+
+**GOAL.** In this study we are interested in testing if the different temperature and/or ovens have an effect on the life of the components.
+
+### Data Cleaning
+The first thing we will do is make sure everything is correct in R. We will convert both `Temperature` and `Oven` to factors.  `Temperature` is recorded as a numeric variable but we want to treat it categorically here. (We also do this with `Oven`, though it is not necessary.)
+
+```{r}
+# Convert Temperature and Oven to factors
+component <- component %>%
+  mutate(Temperature = as.factor(Temperature),
+         Oven = as.factor(Oven))
+glimpse(component)
+```
+
+### EDA
+
+Create an interaction plot for temperature and oven type. Put `Temperature` on the *x*-axis since it is naturally quantitative (compared to the oven type (labeled A, B, C, D)), so it follows intuition a little bit better.
+
+```{r}
+ggplot(component, aes(x = Temperature, y = Lifetime, color = Oven, group = Oven)) +
+  stat_summary(fun.y=mean, geom="point") +
+  stat_summary(fun.y=mean, geom="line") +
+  labs(y="Lifetime of an Oven") +
+  theme_bw()
+
+ggplot(component, aes(x = Oven, y = Lifetime, color = Temperature, group = Temperature)) +
+  stat_summary(fun.y=mean, geom="point") +
+  stat_summary(fun.y=mean, geom="line") +
+  labs(y="Lifetime of an Oven") +
+  theme_bw()
+```
+
+*The oven lifetimes are all very similar for temperature at 500 degrees. At 550 degrees, the lifetimes spread out, with only the lifetime of oven D increasing. At 600 degrees, ovens A, B, C come to around the same value, with oven B increasing. Oven D drops in lifetime by a lot but not to close to the cluster of the other three ovens.*
+
+### Analysis
+
+Perform a Two-Way ANOVA. Be sure to check your assumptions!
+
+```{r}
+component.anova <- aov(Lifetime ~ Temperature + Oven + Temperature:Oven, data = component)
+autoplot(component.anova)
+summary(component.anova)
+```
+
+*The plots look reasonable for the most part. There is indication of a possible error in the Scale-Location plot since the line is a bit positive but overall, we're good. *
+
+*Here, we see that with an $F$ statistic of 1.631 on 6 and 12 degrees of freedom with a $p$-value of 0.22, the interaction influence is not significant. Looking at the temperature $F$ statistic of 8.13 on 2 and 12 degrees of freedom with a $p$-value of 0.005, we appear to have evidence that the temperature does have a significant effect on the lifetime of the oven. And looking at the oven type $F$ statistic of 5.179 on 3 and 12 degrees of freedom with a $p$-value of 0.015, we appear to have evidence that the temperature does have a significant effect on the lifetime of the oven. A multiple comparisons test is necessary for further validation.*
+
+
+### Multiple Comparisons
+
+Test the multiple comparisons (only if necessary). Be sure to account for any interactions present in the data.
+
+```{r, message= FALSE}
+temperature.mc <- emmeans(component.anova, "Temperature")
+oven.mc <- emmeans(component.anova, "Oven")
+plot(contrast(temperature.mc, "pairwise"))
+plot(contrast(oven.mc, "pairwise"))
+```
+
+*From the temperature plot, we can tell that there is only a significant difference between the ovens at 500 degrees and 600 degrees because 0 is not located within the interval. The difference between the 500 and 550 degree ovens and the difference between the 550 and 600 degree ovens is not significant.*
+*From the oven plot, we can tell that there is a significant difference between ovens B and D and a significant difference between ovens A and D since 0 is not in either interval. The differences between ovens C and D, B and C, A and C, and A and B are not significant because 0 is in the interval for these observations. *
+

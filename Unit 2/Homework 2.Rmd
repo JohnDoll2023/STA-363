@@ -1,0 +1,89 @@
+---
+title: "Homework 2"
+author: "John Doll"
+date: "2/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Problem 1
+
+## Question 1
+
+The experiment attempted to control for nuisance variation and confounding variables by choosing nails that had diameters within 0.1 mm of each other and that were driven into the same type of lumber. They were extracted randomly, which would help reduce variation compared to if they were extracted according to some orderly method.
+
+Possible errors and limitations that could come with this experiment do not necessarily have to do with what the researchers are doing, but with the nails in the lumber. Some nails may have been driven into the lumber harder than others, or at angle rather than straight in. This would not be a problem if this chance of variation was equal for all nails, but it would be a problem if one nail or another was easier to drive into the wood.
+
+## Question 2
+
+```{r nails, message=FALSE}
+library(tidyverse)
+library(knitr)
+
+Nails <- read.csv("nail_strengths.csv")
+Nails %>%
+  group_by(Nail_type) %>%
+  summarize(Mean = mean(Withdrawal_strength),
+            SD = sd(Withdrawal_strength),
+            Min = min(Withdrawal_strength),
+            Q1 = quantile(Withdrawal_strength, prob = 0.25),
+            Median = median(Withdrawal_strength),
+            Q3 = quantile(Withdrawal_strength, prob = 0.75),
+            Max = max(Withdrawal_strength)) %>%
+    kable()
+```
+
+What comes to our attention immediately is the difference in means between the nail withdrawal strengths. Based on the given data, the annularly threaded (AT) nail appears to have a higher withdrawal strength than the helically threaded (HT) nail which also appears to have a higher withdrawal strength than the smooth shank (SS). The AT nail also has the largest variation in terms of standard deviation, range between max and min values, and range between quartile three and quartile one. The HT nail looks to have the least variation with the smallest standard deviation, smallest range between max and min, and smallest range between quartile three and quartile one.
+
+## Question 3
+
+```{r}
+ggplot(Nails) +
+  geom_boxplot(aes(x = Nail_type, y = Withdrawal_strength)) +
+  labs(x = "Nail Type", y = "Withdrawal Strength (N/mm)",
+       title = "Withdrawl Strength of Different Nail Types",
+       subtitle = "Force Required to Pull the Nails Out of the Lumber") +
+  theme_bw()
+```
+
+The average nail withdrawal strength is the highest for the AT nail, which also has the greatest variation; it has the longest tails and the biggest length of box (difference between quartiles). The means of the HT nail and the SS nail are very similiar, and both are distantly lower than the AT nail. The HT nail also has the smallest variation; it has very small tails and a small box. 
+
+## Question 4
+
+```{r}
+library(ggfortify)
+
+Nails.anova <- aov(Withdrawal_strength ~ Nail_type, data = Nails)
+autoplot(Nails.anova)
+```
+
+Normality checks out, there is nothing too concerning in the plots. No fanning in the residuals, they appear to have no pattern, the Residuals vs Fitted and Scale-Location plots each have relatively straight blue lines, and the Normal Q-Q plot testing normality passes the pencil test, no points are too distant from the line.
+
+## Question 5
+
+```{r}
+summary(Nails.anova)
+```
+
+Here we see an $F$ = 2.289 statistic on 2 and 27 degrees of freedom, which is not significantly different than the value of 1 due to the $p$-value = 0.121. We do not have evidence to suggest that the different nail types influence the withdrawal strength. 
+
+## Question 6
+
+```{r}
+
+```
+
+From this output, we have no reason to do a multiple comparisons test because there is nothing that we need to test a significant difference for since from our ANOVA we already know that they are not significantly different. 
+
+# Problem 2
+Two-sample t-test could be used, but it would be missing the point because recorded data would be left out. You could compare either experimental drug with the control group, but you would have to perform it twice, once for drug A to the control and once for drug B to the control. There are better, easier methods to use than this one. 
+
+Paired t-test would not make sense in this case.
+
+This study is a designed experiment because the manufacturers are deliberately applying treatments to three separate groups. Because this experiment is not naturally occurring, it cannot be an observational study. 
+
+One-Way Anova is useful in this scenario because from it, we obtain the $f$ statistic and $p$ value which we can use to determine whether or not there is a significant difference in at least two of the three sets of data. But if we want to find which two, we must go farther.
+
+Multiple comparisons, Dunnet method, is the way to go for this data. The baseline control data is the group that receives the Diuretic drug, and drug A group and drug B group can be compared with the Diuretic group. Here, we can tell for sure if drug A or drug B does significantly better than the Diuretic with the $p$-value. 

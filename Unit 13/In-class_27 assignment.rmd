@@ -1,0 +1,84 @@
+---
+title: "Class 27: Assignment"
+author: "John Doll"
+date: "May 4, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(tidyverse)
+library(GGally)
+```
+
+
+**Mussel data.** These data contain numbers of species of mussels (`Species`) in 41 rivers and corresponding predictor variables: area (`area`), number of stepping stones (intermediate rivers) to 4 major species-source river systems: Alabama-Coosa (`StepsToAC`), Apalachicola (`StepsToAP`), St. Lawrence (`StepsToSL`), and Savannah (`StepstoSV`)); Nitrate Concentration (`Nitrate`), Hydronium concentration (10^(-pH)) (`Hydronium`), and solid residue (`Residue`). The area variable is also provided in logged form (`logArea`).
+
+Source:  J.J. Sepkoski, Jr., M.A. Rex (1974). "Distribution of Freshwater Mussels: Coastal Rivers as Biogeographic Islands," Systematic Zoology, Vol. 23, #2, pp. 165-188.
+
+```{r}
+mussels <- read.table("mussels1.dat")
+names(mussels) <- c("River", "Species", "Area",
+                    "StepsToAC", "StepsToAP", "StepsToSV", "StepsToSL",
+                    "Nitrate", "Residue", "Hydronium", "logArea")
+head(mussels)
+```
+
+
+
+*ANSWER THE FOLLOWING* with justification based on the output:
+
+----
+
+**Question 1**. Make a histogram of the number of species of mussels in these 41 rivers.  What kind of shape does the distribution have?
+
+```{r}
+ggplot(mussels, aes(x=Species) ) + 
+  geom_histogram(binwidth=1)
+```
+
+*ANSWER HERE: The shape looks like it is right skewed. * 
+
+
+----
+
+**Question 2**. Fit a full Poisson regression model to predict the number of species from the four "stepping stones" variables, log area, and the nitrate, residue, and hydronium variables.  Cite the AIC value for this full model.
+
+```{r}
+mussels.fit <- glm(Species ~ StepsToAC + StepsToAP + StepsToSV + StepsToSL + logArea + Nitrate + Residue + Hydronium, data = mussels, family = poisson)
+summary(mussels.fit)
+```
+
+*ANSWER HERE: The AIC value for this model is 244.27.* 
+
+
+----
+
+**Question 3**. Perform a forward stepwise variable selection to settle on which predictors are important for modeling thenumber of mussel species.  Use the full model from Question 2 as your "scope" in the variable selection.  Which predictors from the full model are removed in the variable selection?
+
+```{r}
+null.fit <- glm(Species ~ 1, data = mussels, family = poisson)
+step.forward <- step(null.fit, scope = formula(mussels.fit), direction = "forward", trace = FALSE)
+summary(step.forward)
+```
+
+*ANSWER HERE: Predictors that have been removed are `StepsToAP`, `StepsToSV`, `StepsToSL`, and `Nitrate`.* 
+
+
+----
+
+**Question 4**. Perform a goodness-of-fit check for your stepwise model in Question 3.
+
+*ANSWER HERE: Residual Deviance = 46.426, Degrees of Freedom = 38. 48.426/38 = 1.274. This is close to 1 and not above 2 so this model will be fine.* 
+
+
+----
+
+**Question 5**. Use the stepwise model from Question 3 to obtain a model-predicted number of mussel species in the Penobscot River.  Look at the information in the `head(mussel)` output above if you need relevant predictor info for this specific river.
+
+```{r}
+newdata = data.frame(StepsToAC = 33, StepsToAP = 28, StepsToSV = 21, StepsToSL = 4, Nitrate = 0.8, Residue = 57, Hydronium = 4, logArea = 9.0407)
+predict(step.forward, newdata = newdata, type = 'response')
+```
+
+*ANSWER HERE: Our forward step model predicts with `StepsToAc` = 33, `StepsToAp` = 28, `StepsToSV` = 21, `StepsToSL` = 4, `Nitrate` = 0.8, `Residue` = 57, `Hydronium` = 4, and `logArea` = 9.0407 approximately 8 different species in the Penobscot River.* 

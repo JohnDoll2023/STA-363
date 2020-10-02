@@ -1,0 +1,274 @@
+---
+title: "Class 19: Model/Variable Selection"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+
+library(tidyverse)
+library(knitr)
+library(ggfortify)
+library(leaps)
+library(car)
+library(GGally)
+```
+
+## Model Selection
+
+**Model selection** is the act of selecting a statistical model from a set of candidate models and/or predictor variables. That is, in a given problem where you are looking to build a model for a response variable $Y$ and you have a set of possible predictor variables $X_1$, $X_2$, $X_3$, $\ldots$, how do you choose the best model? 
+
+The area of **model selection** continues to augment and connects classic statistics to machine learning and data science. We only scratch the surface here. For more information, feel free to consult the source of all knowledge, Wikipedia!
+
+https://en.wikipedia.org/wiki/Model_selection
+
+----
+
+## Data: predictors of rock strength
+
+The file `rockstrength.csv` contains the uniaxial compressive strength (`UCS`) of 30 rocks/minerals along with 8 potential predictor variables: Percentage Quartz (`quartz`), Percentage Plagioclase (`plag`), Percentage K. feldspar (`kfds`), Percentage Hornblende (`hb`), Grain size in mm (`gs`), grain area in mm^2 (`ga`), shape factor (`sf`) and aspect ratio (`ar`).
+
+We will consider this data as a working example. First, read the data.
+
+```{r message=FALSE}
+rocks <- read.csv("rockstrength.csv")
+head(rocks)
+```
+
+
+### Visualize the data
+
+```{r, fig.width=8, fig.height=8}
+ggscatmat(rocks, columns=c(-1)) # Do not plot the ID values. Not meaningful
+```
+
+Many variables appear correlated with `UCS` (namely, `quartz`, `hb`, `gs`, `ga` and `sf`).
+
+### Fit a full main effects model
+
+We begin by fitting a full main effects model using all predictor variables:
+
+```{r}
+full.fit <- lm(UCS ~ quartz + plag + kfds + hb + gs + ga + sf + ar, data=rocks)
+autoplot(full.fit)
+```
+
+There is a little bit of goofiness in the Residuals vs Fitted plot and Scale-Location plot, indicating the variance may be increasing with the mean. However, linearity and normality look okay. A Box-Cox plot has been excluded here but suggests that no transformation is necessary. So overall, we feel it is reasonable to proceed with using the model for inference purposes.
+
+```{r}
+summary(full.fit)
+```
+
+We note that only `quartz` and `sf` appear as significant predictors for `UCS` when accounting for the other variables. Based on these results and the scatterplot matrix above, we suspect multicollinearity could be influencing our model. We can check that by looking at the Variance Inflation Factors (VIFs):
+
+```{r}
+vif(full.fit)
+```
+
+As suspected, there are issues with `gs` and `ga` (note the scatterplot matrix again!). Not surprising.
+
+So chances are, only one of `gs` or `ga` is contributing meaningful information to our model (look at the data description -- they are essentially the same!).
+
+----
+
+## Information Criterion
+
+Besides looking at $R^2_a$ and the residual standard error, another method to compare models is via an *Information Criteria*. Two popular techniques are **Akaike Information Criteria (AIC)** and **Bayesian-Schwarz Information Criteria (BIC)**. These methods are similar to $R^2_a$ in that they balance goodness-of-fit (small residual error) with a penalty term for including extraneous variables. The respective equations are
+$$AIC = n\log(RSS/n) + 2p, ~~~~~ BIC = n\log(RSS/n) + \log(n)p$$
+where $RSS$ is the residual sum of squares, $n$ is the sample size and $p$ is the number of parameters fit (essentially the number of $\beta$-terms). **In general, we prefer models with a small AIC or BIC value** (similar to wanting a larger $R^2_a$). We can extract the AIC and BIC for a given model using the `AIC()` and `BIC()` functions. Consider the following examples:
+
+```{r}
+fit1 <- lm(UCS ~ quartz + gs, data=rocks)
+fit2 <- lm(UCS ~ quartz + ga, data=rocks)
+fit3 <- lm(UCS ~ quartz + gs + ga, data=rocks)
+summary(fit1)
+summary(fit2)
+summary(fit3)
+```
+
+Note that in `fit3` we include both variables `gs` and `ga` and the $R^2$ value has increased (granted, not by much) compared to models `fit1` and `fit2`. We also note that the adjusted $R^2$ has actually *decreased* from `fit1` to `fit3`. This indicates the addition of `ga` to a model with `quartz` and `gs` is unecessary.  However, moving from `fit2` to `fit3` appears justified.  In a similar fashion, we can consider the AIC and BIC values:
+
+```{r}
+AIC(fit1)
+AIC(fit2)
+AIC(fit3)
+BIC(fit1)
+BIC(fit2)
+BIC(fit3)
+```
+
+For both AIC and BIC, `fit2` and `fit3` have larger values than `fit1`. Thus we have multiple measures suggesting that `fit1` is the best fit of those considered here.
+
+**NOTE:** $R^2_a$, AIC and BIC do not necessarily pick the same model!
+
+----
+
+## Stepwise Regression
+
+The above example involving `fit1`, `fit2` and `fit3` is an example of *model selection* (albeit not a complete example). We used $R^2_a$, AIC and BIC to pick a model. You may ask youself, why not try other variables?  Perhaps if we added `hb` as a variable onto `fit1`, it would help?  What about `plag`?  What about `kfds`?
+
+We can algorithmically step through each predictor variable, adding variables (or subtracting them) -- this could take a while!  Fortunately, a computer is great at doing repetitive tasks, so we can do it.
+
+
+### Backward selection
+
+The idea is to start a model with all predictors in it (so here, `UCS` is estimated with `quartz`, `plag`, `kfds`, `hb`, `gs`, `ga`, `sf` and `ar`) and the AIC is calulated for this model.
+
+* Each predictor is removed one at a time and the model is refit -- so a model with everything except `quartz` is fit. Then a model with everything but `plag` is fit, and so on. The AIC is calculated for each.
+* The model that improves AIC (biggest decrease) is selected as the new best model.
+* The next step involves removing each remaining variable one at a time looking for an improved AIC (so removing the least important two variables).
+* This process continues until the AIC starts to get worse (i.e. when AIC increases).
+
+### Forward selection
+
+The forward selection algorithm is very similar to backward selection but starts with little (or no) variables, and works its way up by adding variables that improve the fit. 
+
+In R, backward and forward selection methods are implemented in the functions `step` or `stepAIC` in the `MASS` library.
+
+----
+
+## Example with rock strength
+
+First, we remind ourselves of the full model fit above. 
+
+```{r}
+summary(full.fit)
+```
+
+The model is significant (overall $F$-test, $p$-value is near 0). The model explains about 83% of the variability in `UCS`. It appears only `quartz` and `sf` are significant (and barely at that, both $p$-values just under 0.05) but we also note the VIF values (multicollinearity is messing up these $t$-tests). Namely, `gs` and `ga` are HIGHLY related. 
+
+#### Backward selection illustration
+
+```{r}
+step.pick <- step(full.fit, direction="backward")
+summary(step.pick)
+vif(step.pick)
+```
+
+We see our backward selection model has a similar R-squared to the full model but with an improved $R^2_a$. We know it has a better AIC value (the algorithm picks based on AIC). There are no issues with multicollinearity (VIF values are all fairly small). The chosen model still includes some insignficant terms which leads to the question: do `plag`, `hb` and `ar` significantly improve the model?  We can statistically test this based on a reduced $F$-test (covered a few weeks ago).
+
+```{r}
+remove.plag.hb.ar <- lm(UCS ~ quartz + gs + sf, data=rocks)
+anova(remove.plag.hb.ar, step.pick)
+```
+
+Interesting!  Statistically speaking, we could remove `plag`, `hb` and `ar` and not lose any significant information.  But they are included in the backward selection model!
+
+#### Forward selection illustration
+
+```{r}
+null.fit <- lm(UCS ~ 1, data=rocks)
+step.pick.forward <- step(null.fit, scope=formula(full.fit), direction="forward")
+summary(step.pick.forward)
+```
+
+We see that the forward selection algorithm chose a different model than backward selection! -- it includes `hb`, and uses `ga` instead of `gs`. The variable is marginally significant (note its $p$-value compared to the above: both are fairly close to 0.05, there is nothing magical about that number). AIC was used here, we could compare the $R^2_a$ and/or BIC values amongst these models
+
+```{r}
+summary(step.pick)$adj.r.squared
+summary(remove.plag.hb.ar)$adj.r.squared
+summary(step.pick.forward)$adj.r.squared
+BIC(step.pick)
+BIC(remove.plag.hb.ar)
+BIC(step.pick.forward)
+```
+
+By $R^2_a$, it appears the backward selection model is best, but via BIC it suggests the forward selection model or the model based on just `quartz`, `gs`, and `sf` (`remove.plag.hb.ar`) -- the BIC values are practically the same.
+
+----
+
+## Best subsets regression
+
+The stepwise technique is nice because it will output a model that it deems *best* based on some criteria (AIC) and procedure. Yet, we see potential problems with the selected model (insignificant terms in backward selection, differing models were selected).  Furthermore, if we used a different criteria (say BIC), we may get a different model since each step could result in different variable selection. 
+
+So, an arguably better approach is to **look at many subset models of different sizes**.  Here, we use the `regsubsets` function in the `leaps` package. 
+
+The idea of best subsets regression is the following:
+
+* Here we have 8 possible predictor variables.  This leaves $2^8$ possible linear main-effects models (i.e. without any interactions or polynomial terms). So there are 256 possible linear models we can fit. Of all 256 models, one will have the best AIC, likely a different model will have the best BIC, and another could have the best $R^2_a$. To complicate matters even further, multiple models may essentially have the same $R^2_a$ or AIC values!  Futhermore, from a practical perspective, do we really want to look at all 256 models?
+
+A computer can do much of the work for us. In the example below, we tell R to **determine the 3 best models of each size** containing up to 8 predictors. ("Size" refers to the number of predictors in the model.)
+
+```{r}
+fit.subs <- regsubsets(formula(full.fit), data=rocks, nbest=3, nvmax=8)
+summary(fit.subs)
+```
+
+We see many models were fit. How can we compare or select from amongst these models?  We can build a quick plot to compare them:
+
+```{r}
+subsets(fit.subs, statistic="adjr2", legend=FALSE)
+subsets(fit.subs, statistic="bic", legend=FALSE)
+```
+
+These plots are very handy (albeit aethestically ugly ... you can find more attractive plots in the textbook). We look for inflection points (where the bend occurs) in the pattern.  It sure seems to be around the 3 or 4 subset models. 
+
+Let's run the algorithm again focusing on the best models with at most 4 predictor variables.
+
+```{r}
+summary(regsubsets(formula(full.fit), data=rocks, nbest=1, nvmax=4))
+```
+
+The *best* model with 4 terms has `quartz`, `hb`, `ga` and `sf`. The *best* model with 3 terms has `quartz`, `gs` and `sf`. 
+
+Note that we built similar models above using forward selection and backward selection. Let's compare these two models.
+
+```{r}
+fit.best3 <- lm(UCS ~ quartz + gs + sf, data=rocks)
+fit.best4 <- lm(UCS ~ quartz + hb + ga + sf, data=rocks)
+summary(fit.best3)
+AIC(fit.best3)
+BIC(fit.best3)
+summary(fit.best4)
+AIC(fit.best4)
+BIC(fit.best4)
+```
+
+Given that $R^2_a$ is better, and the AIC and BIC values are also better for the model with the 4 terms, we would argue it is better. 
+
+----
+
+## Summary
+
+By backward selection, we chose the model
+
+```{r}
+step.pick
+```
+
+and by forward selection and the best subsets approach, we chose
+
+```{r}
+step.pick.forward
+```
+
+From our earlier analysis, it appears either `gs` or `ga` are nearly equivalent and valid. So what about a similar model with `gs` instead of `ga`?
+
+```{r}
+another.fit <- lm(UCS ~ quartz + hb + sf + gs, data=rocks)
+summary(another.fit)
+AIC(another.fit)
+BIC(another.fit)
+```
+
+We can summarize the fits with code such as the following:
+
+```{r}
+tab <- data.frame(Adj.R.Squared = c(summary(full.fit)$adj.r.squared, summary(step.pick)$adj.r.squared, summary(step.pick.forward)$adj.r.squared, summary(another.fit)$adj.r.squared),
+                  AIC=c(AIC(full.fit), AIC(step.pick), AIC(step.pick.forward), AIC(another.fit)),
+                  BIC=c(BIC(full.fit), BIC(step.pick), BIC(step.pick.forward), BIC(another.fit)) )
+rownames(tab) <- c("Full: quartz-plag-kfds-hb-gs-ga-sf-ar",
+                   "Backward: quartz-plag-hb-gs-sf-ar",
+                   "Forward & Subsets: quartz-hb-ga-sf",
+                   "Other: quartz-hb-gs-sf")
+kable(tab)
+```
+
+**Which model should we use?**
+
+There is no *correct* answer to this question! These tools are exactly that ... *tools*. They help us, the practitioner, choose the model!
+
+Based on all the above, the one finding that appears consistent is that the full-fit model is less than ideal. The other three models have comparable performance (all measures are fairly close) with BIC separating the backward selection method from the others.
+
+If we needed to make a decision based on what has been presented, we would use a model with `quartz`, `hb`, `sf` and `ga`; it has the second-largest $R^2_a$ (and only 0.003 less than the largest), and smallest AIC and BIC of those considered.  We will see another method to compare models next week.

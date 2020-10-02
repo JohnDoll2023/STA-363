@@ -1,0 +1,61 @@
+---
+title: "Class 17: Assignment"
+author: "John Doll"
+date: "Mar 31, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(ggfortify)
+library(gridExtra)
+library(lindia)
+library(car)
+```
+
+
+For this assignment, refer to the Navy Hospitals data that we explored in the in-class discussion.  The necessary data wrangling done previously is performed in the folling code chunk:
+
+
+```{r}
+hospital <- read.table("navyHospitals.txt", header=TRUE)
+hospital <- hospital %>% 
+  select(-Bed.Days) %>% 
+  mutate(Hospital14 = (row_number()==14))
+```
+
+At the end of the in-class discussion, we fit a regression model using all the predictors *except* `Population`.  We found the VIFs, checked the adjusted $R^2$ and the residual standard error:
+
+```{r}
+hospital.fit5 <- lm(Manhours ~ Patient.Load + X.Rays + Days + Hospital14, data=hospital)
+vif(hospital.fit5)
+summary(hospital.fit5)
+```
+
+
+*ANSWER THE FOLLOWING* with justification based on the output:
+
+----
+
+**Question 1**. Fit a regression model using all the predictors *except* `Patient.Load`.  Find the VIFs, and check adjusted $R^2$ and the residual standard error.
+
+```{r}
+hospital.fit6 <- lm(Manhours ~ X.Rays + Days + Population + Hospital14, data = hospital)
+vif(hospital.fit6)
+summary(hospital.fit6)
+```
+
+----
+
+**Question 2**. Which of these two models (yours, or the model `hospital.fit5`) does a better job of handling multicollinearity?  Cite evidence from the output.
+
+*`hospital.fit6` does a better job because the VIFs are all lower than 10 now since I took out `Patient.Load` from my linear model.*
+
+----
+
+**Question 3**. Which of these two models would you ultimately choose to use, and why?
+
+*Ultimately, I would choose `hospital.fit5` because even though the VIFs would suggest otherwise because I believe `Patient.Load` is more important than `Population`. As the professor said during the lecture, it makes more conceptual sense to use `Patient.Load` rather than `Population` because that shows the actual amount of patients a hospital has served, rather than the number of the people in the area that could go to the hospital. You could have a big population surrounding two hospitals, but if most patients go to hospital 1 rather than hospital 2, the `Patient.Load` variable would better predict the `Manhours` needed for each hospital.*

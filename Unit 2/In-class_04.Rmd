@@ -1,0 +1,137 @@
+---
+title: "Class 04: Multiple Comparisons"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(tidyverse)
+library(knitr)
+```
+
+**Recall the Tire Tread Comparison from Class 03:** A tire manufacturer is interested in investigating the handling properties for different tread patterns. Data were recorded on the stopping distances measured to the nearest foot for a standard sized car to come to a complete stop from a speed of 60 miles per hour. There are six measurements of the stopping distance for each of four different tread patterns labeled A, B, C and D. The same driver and car were used for all 24 measurements and, although not clear from the saved data file, the order of treatments were assigned at random.'
+
+Last class, we ran a one-way ANOVA and found a significant difference between **at least two** of the two tread patterns true mean sopping distance:
+
+```{r}
+Tire <- read.csv("http://users.miamioh.edu/hughesmr/sta363/TireData.csv")
+tire.anova <- aov(StopDist ~ tire, data=Tire)
+summary(tire.anova)
+```
+
+The question we confront now is: **which tire tread patterns are different from each other?**  The *F*-test only tells us that we can be confident that *some* difference exists, but it does not tell us which ones are different!  To do so, we we need to perform a follow-up to the significant *F*-test.
+
+## Follow-up Multiple Comparisons
+
+We begin some follow-up procedures by revisiting the boxplots we made before running the ANOVA:
+
+```{r}
+ggplot(Tire) + 
+  geom_boxplot(aes(x=tire, y=StopDist), col="gray60" ) +
+  geom_jitter(aes(x=tire, y=StopDist), width=0.1 ) +
+  labs(x="Tread Type", y="Stopping Distance") + 
+  theme_bw()
+```
+
+By eyeball method, it sure looks like the stopping distance is shorter (smaller) in tire tread group $A$.
+
+(BTW, what do you think `geom_jitter()` does?)
+
+
+### How do we statistically test for differences?
+
+It seems intuitive that we could perform a $t$-test comparing tread group $A$ to group $B$, and then tread group $A$ to $C$, $A$ to $D$, $B$ to $C$, $B$ to $D$ and $C$ to $D$. Note that one-way ANOVA essentially is comprised of 6 two-sample comparisons! That is, **it jointly makes all six comparisons at one time.**
+
+**So why not just do six two-sample $t$-tests?**  The answer relates to probability. First, recall from Intro Stats:
+
+$$\textrm{significance level} = \alpha = P(\textrm{Type I error})$$
+
+Further,
+
+$$P(\textrm{No Type I error}) = 1 - P(\textrm{Type I error}) = 1 - \alpha$$
+
+by the complements rule. Now, imagine I perform **two** statistical tests, each at significance level $\alpha$. 
+
+$$P(\textrm{No Type I errors in either test}) = P(\textrm{No Type I error in test 1 AND No Type I error in test 2})$$
+
+The right hand side is comprised of two independent events (performing the first hypothesis test followed by a second). Thus,
+
+$$P(\textrm{No Type I errors in either test}) = (1 - \alpha)\times(1-\alpha) = (1-\alpha)^2$$
+
+Suppose $\alpha=0.05$, then $P(\textrm{No Type I errors in either test}) = 0.95^2 = 0.9025$, thus $$P(\textrm{Type I error occurs}) = 1 - 0.9025 = 0.0975.$$
+
+By the same rationale, if we performed **six** hypothesis tests, the probability of a Type I error occuring is 
+$$1 - (1 - \alpha)^6 = 1 - 0.95^6 = 0.2649$$
+
+So, if we performed six two-sample *t*-tests, each at 5\% significance, there is greater than a 25\% chance we commit a Type I error somewhere in the complete analysis!  This is generally considered unacceptable.  Think about as to why.
+
+### Multiple Comparisons
+
+There are several methods available to adjust the overall significance level when performing multiple hypothesis tests (known as **multiple comparisons**): 
+
+#### Bonferoni Correction
+
+One of the simplest methods is to just adjust the $\alpha$-level proportionally downward for each test you perform.  This is typically known as a Bonferroni correction. Basically, if you are performing $m$ hypothesis tests, or building $m$ confidence intervals, perform each with significance level
+$$\alpha^* = \frac{\alpha}{m},$$
+or with corresponding confidence level $1-\alpha^* = 1-\alpha/m$. This is guaranteed to control the overall Type I error rate to be less than $\alpha$. 
+
+As an example consider performing two test each at $5\%$ significance level, we know the overall Type I error rate is closer to 9\% (see above). If each test was performed at $0.05/2=0.025$ we would get an overall Type I error rate of 
+$$P(\textrm{Type I error is committed}) = 1-P(\textrm{No Type I error}) = 1 - (1-0.05/2)^2 = 0.049375 < 0.05$$ 
+
+With six hypothesis tests, we would perform each at $0.05/6 = 0.008333$ which results in an overall error rate of $0.04897 < 0.05$.
+
+The Bonferroni method is always available but generally not preferred when the number of comparisons is large, as it tends to be overly conservative in protecting against Type I errors.
+
+#### Tukey HSD ("Honest Significant Differences")
+
+This method is attributed to John Tukey. (He has nothing to do with Thanksgiving.) The Tukey method controls the overall Type I error rate by adjusting the significance level each of the individual comparison but it does so in a more complex way than the naive Bonferroni approach above. The result can also be displayed as confidence intervals. It is implemented in the `emmeans` function.
+
+```{r, message=FALSE}
+library(emmeans)                        # Load the package
+tire.mc <- emmeans(tire.anova, "tire")  # Run emmeans on the factor "tire"
+contrast(tire.mc, "pairwise")           # Perform pairwise comparisons
+```
+
+Here, we see pairwise comparisons and the $p$-values of each comparison has been adjusted for the fact we are performing six multiple comparisons. We see that tread $A$ is different than $C$ and $D$; otherwise there is no difference in tread groups.
+
+We can also calculate more informative confidence intervals of the comparisons.
+
+```{r}
+confint(contrast(tire.mc, "pairwise"))
+```
+
+From this output, we can conclude (with 95% confidence) that:
+
+* tread $A$ has a mean stopping distance that is between 11.5 to 72.4 feet shorter than tread $C$
+* tread $A$ has a mean stopping distance that is between 0.22 to 61.1 feet shorter than tread $D$
+* no other tread types have significantly different mean stopping distances (all other CIs contain 0)
+
+We can also plot the pairwise comparisons
+
+```{r}
+plot(contrast(tire.mc, "pairwise"))
+```
+
+**Remember** when looking at the confidence intervals we are looking to see if **zero** is inside any given CI (this would indicate no significant difference).
+
+#### Dunnett Multiple Comparisons
+
+Another method for multiple comparison is known as Dunnett's method. It works in a similar way (controlling the overall error rate) as Tukey. However, here one of the treatments (by default the first one listed) is considered a **control**, and the only comparisons considered are versus the control. 
+
+Suppose tire tread $D$ is the *control*.  We simply need to tell `emmeans` that the reference factor level (`ref`) is the fourth one list; i.e., treatment $D$.
+
+```{r}
+contrast(tire.mc, "trt.vs.ctrl", ref=4)
+```
+
+As before, we can calculate and plot the confidence intervals:
+
+```{r}
+confint(contrast(tire.mc, "trt.vs.ctrl", ref=4))
+plot(contrast(tire.mc, "trt.vs.ctrl", ref=4))
+```
+

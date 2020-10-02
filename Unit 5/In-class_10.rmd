@@ -1,0 +1,120 @@
+---
+title: "Class 10: Assumption Checking in Regression"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(lindia)
+library(ggfortify)
+```
+
+### Example: Supervisors data
+
+In a study of 27 industrial establishments of varying size, the number of supervised workers and the number of supervisors were recorded.  The goal of the study was to address supervisor needs in industries similar to those sampled, and to develop a model to relate (and ultimately, predict) supervisor needs for a given sized workforce.  The data appear in the text file `supervisors.txt`.
+
+Read in the data and take a quick look:
+
+```{r}
+supdata <- read.table("supervisors.txt", header=TRUE)
+kable(head(supdata))
+```
+
+Which variable plays which role?
+
+* The **predictor variable** ($X$) in this scenario is:  *Workers*
+* The **response variable** ($Y$) in this scenario is : *Bosses*
+
+Since there is only one predictor variable, we start with a simple scatterplot of the data to visually investigate the nature of the relationship:
+
+```{r}
+ggplot(supdata, aes(x=n.workers, y=n.supervisors)) +
+  geom_point() + 
+  xlab("Number of Workers") +
+  ylab("Number of Supervisors")
+```
+
+**Question:** Based on the above, does it appear as though a simple linear regression model $Y = \beta_0 + \beta_1 X_1 + \varepsilon$ will be adequate to explain the relationship between the size of the supervisor force and size of the work force?  
+
+*Maybe, maybe not, we aren't sure.*
+
+--------------
+
+#### Assumptions for linear regression
+
+The assumptions are important for when we use the model for inference and prediction later, so we need to check them up front.  The assumptions are much the same as for the ANOVA models that we had before, but with one importaant addition:
+
+1. **Independence**: The $\varepsilon$ terms are independent (i.e. the residuals are independent).
+2. **Homogeneous error variance**: The variance of the $\varepsilon$ terms are constant regardless of the values of the predictor variables.
+3. **Normality**: The $\varepsilon$ terms are Normally distributed.
+
+...and one important new one:
+
+4. **Linearity**: The form of the model being fit is appropriately specified.
+
+The last assumption is new because we have choices in model specification now, so we need to choose judiciously.  We can add a **smoother** to get a better sense of the trend suggested by the data themselves:
+
+```{r}
+ggplot(supdata, aes(x=n.workers, y=n.supervisors)) +
+  geom_point() + 
+  geom_smooth() +                 # adds a smoother
+  xlab("Number of Workers") +
+  ylab("Number of Supervisors")
+```
+
+*Data may be flattening out toward end, smoother somewhat shows that but we aren't quite sure.*
+
+The linearity assumption can be formally checked by looking at the *Residuals vs Fitted values* plot, and seeing if there is any systematic trend remaining in the residuals.  **If the model has been reasonably well specified, there should be no "trending" left in the residuals** (which by definition, are the "leftovers" after fitting the model!).
+
+Let's check the linear regression model fit to the observed data values, and check the assumptions:
+
+```{r}
+fit1 <- lm(n.supervisors ~ n.workers, data=supdata)
+autoplot(fit1)
+```
+
+We see evidence of non-linearity...see how the Residuals vs Fited plot shows clear curvature.  So it appears that $X$ does not relate linearly to $Y$ here!  So a straight-line model is probably not a good choice.  
+
+The residuals also exhibit non-homogeneous variance (violation of Assumption 2).  This can often be addressed by trying a **Box-Cox power transformation** on the $Y$ variable.  **See textbook section 8.2**. Box-Cox looks at the data and determines a power $\lambda$ to raise the response variable $Y$ to in order to "tame" the problem.  Box-Cox is available in the `lindia` library, using the function `gg_boxcox`:
+
+```{r}
+library(lindia)
+gg_boxcox(fit1)      # use fit1 from above
+```
+
+A $\lambda$ value of around 0.5 is suggested.  This is the square root transformation, so we decide to instead use $\sqrt{Y}$ (i.e. $\sqrt{n.supervisors}$) as the response variable.  So now, fit this transformed model and recheck the residuals:
+
+```{r}
+fit2 <- lm(sqrt(n.supervisors) ~ n.workers, data=supdata)
+autoplot(fit2)
+```
+
+The fanning in the residuals has been greatly reduced (the normality is also much better ... these often go hand-in-hand). 
+
+**But the drastic non-linearity still exists.**  So what can we do?  We try transforming the $X$ variable to address non-linearity.  Looking at the original scatterplot and remembering a little bit about algebraic functions can be useful here.  A square root transformation on $X$ might be a good choice to start with:
+
+```{r}
+fit3 <- lm(sqrt(n.supervisors) ~ sqrt(n.workers), data=supdata)
+autoplot(fit3)
+```
+
+This appears to be better .. still not "textbook" great, but we have addressed a big part of the assumption problems through transformation. We could still try other transformations on the predictor variable to see if we can do even better, but for now we settle on the model form
+
+$$\sqrt{n.supervisors} = \beta_0 + \beta_1 \sqrt{n.workers} + \varepsilon$$
+
+Once satisfied with the model form, we then look at the coefficient estimates and residual standard error:
+
+```{r}
+summary(fit3)    # model fit summary
+```
+
+*INTERPRETATIONS?* Not so easy with transformed variables!
+
+* The **residual standard error** (see textbook section 5.2) here is $s$ = 0.9578. Note that **this is in the units of this model's form of the response variable**, which is now square root units. This makes interpretation difficult (in the untransformed model, you can see that the residual standard error is 21.73.), especially since the predictor variable is also transformed here. 
+* The $\beta$-coefficient estimate for the predictor here is $b_{1} = 0.31074$.  So for each additional square root unit of `n.workers`, we expect that the square root of `n.supervisors` will increase by 0.3107.  (Not too intutive, is it?)
+
+Transformations can help us satisfy assumptions underlying an inference, but they can present interpretive challenges of their own that we have to deal with.  Often, one needs to think about balancing the trade-off between these challenges and the benefits offered by doing transformations at all.  There is a bit of an art in doing this.

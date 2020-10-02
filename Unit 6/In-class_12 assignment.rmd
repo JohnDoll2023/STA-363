@@ -1,0 +1,73 @@
+---
+title: "Class 12: Assignment"
+author: "John Doll"
+date: "Mar 4 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(lindia)
+library(ggfortify)
+```
+
+
+### Crime Rates Example
+
+State-level crime rate data is provided for all US states and the District of Columbia for the year 2008.  All crime rates are expressed as number of crimes per 100,000 residents.  We are interested in variables that are related to the burglary rate.  The data appear in the CSV file `stateCrimeData.csv`. The relevant variables in the data set for this assignment are:
+
+* `Burglary` - Burglary rate (2008)
+* `UnEmp` - Unemployment Rate (2010)
+* `HSGrad` - Percentage of adult population that graduated from high school (2005)
+* `CollGrad` - Percentage of adult population that graduated from college (2005)
+* `MedianInc` - Median Income for Family of 4 (2005)
+
+
+```{r}
+states <- read.csv("stateCrimeData.csv")
+
+crimedata <- states %>%
+  filter(state != "District of Columbia") %>%
+  select(HSGrad, CollGrad, UnEmp, MedianInc, Burglary)
+```
+
+
+----
+
+**QUESTION 1:** We fit two models to these data below (omitting the check for residuals).  Which of these two models would generate more precise predictions of `Burglary` rates, and why?
+
+```{r}
+model1 <- lm(Burglary ~ HSGrad + CollGrad + UnEmp + MedianInc, data=crimedata)
+summary(model1)
+
+model2 <- lm(Burglary ~ HSGrad + UnEmp + MedianInc, data=crimedata)
+summary(model2)
+```
+
+*The second model because it has a lower residual standard error.*
+
+----
+
+**QUESTION 2:** Using the preferred model from question 1, find a 95% prediction interval for the burglary rate in a state where 88% of the adult population graduated from high school, 30% of the adult population graduated from college, the unemployment rate is 9%, and the median income of a family of 4 is $75000.
+
+```{r}
+test2 <- data.frame(HSGrad = 88, UnEmp = 9, MedianInc = 75000)
+predict(model2, newdata = test2, interval = "pred")
+```
+
+*Don't need to code in college grad rate because it is not in the model chose.*
+
+----
+
+**QUESTION 3:** Is the prediction for hypothetical state in question 2 the result of extrapolation?  See if you can tell by looking at the scatterplot matrix below:
+
+```{r}
+crimedata.preds <- crimedata %>%
+  select(HSGrad, CollGrad, UnEmp, MedianInc)
+ggscatmat(crimedata.preds)
+```
+
+*No because each of the inputted data values is a value on the y-axis for it's respective category.*

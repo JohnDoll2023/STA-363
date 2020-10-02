@@ -1,0 +1,184 @@
+---
+title: "Homework #6"
+author: "John Doll"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+library(knitr)
+library(ggfortify)
+library(lindia)
+library(leaps)
+library(car)
+library(caret)
+```
+
+## Load Data
+
+```{r}
+load("hw6_spotify.RData")
+ls() ## This will display the names of the datasets
+```
+
+## Part 1: Two-sample inference
+
+```{r}
+music_for_training1 <- music_for_training %>%
+  filter(key_mode == "G major" | key_mode == "D major")
+ggplot(music_for_training1, aes(x = key_mode, y = tempo)) +
+  geom_boxplot() +
+  stat_summary(fun.y = mean, geom="point", shape = 18, size = 5) +
+  labs(x = "Key Mode", y = "Tempo (in bpm)") + 
+  ggtitle("Mean Tempo") +
+  theme_bw()
+```
+
+2. The distribution of tempo appears to very similar between the two `key_mode` categories. Their means, medians, and first and third quartiles all look to be at about equal positions with each other on the graph. The tails on each box plot are of similar length.
+
+```{r}
+t.test(tempo ~ key_mode, data = music_for_training1)
+```
+
+3. Based on the output, there is a statistical significance in the true mean tempo with regards to the key mode with a t-value of 3.9143 and a $p$-value of 9.084 x 10^-5^ on 32,834 degrees of freedom. This confidence interval backs up this claim since the value 0 is not included in it. We can be 95% confident that the true mean tempo is 0.65 to 1.96 beats per minute higher for D major than in G major.
+
+4. The t-test results do not agree with my analysis of the box plots since the t-test was significant and I did not see a large difference in the tempos for the key modes in the box plot.
+
+5. The problem with using the $p$-value stems from the value of *n*. The larger n becomes, the easier it is for a result to be statistically significant, and the smaller n becomes, the harder it is for n to be significant. The limitations with the $p$-value in this setting come from our n being very large. Because of this, it is very likely for our $p$-value to be significant. If our n was much smaller, then our data set would be less likely to be significant.
+
+## Part 2: EDA of response variable
+
+```{r}
+ggplot(music_for_training, aes(x = popularity)) +
+  geom_histogram(binwidth = 1) +
+  ggtitle("Popularity Histogram")
+```
+
+The histogram plot of the popularity is extremely right skewed which makes sense. Only a select amount of songs become popular and the rest are sorted through to the bottom. The most populated popularity location is 0 and the least populated is somewhere above 75 but is hard to tell from this graph.
+
+```{r}
+music_for_training2 <- music_for_training%>%
+  summarize(Mean = mean(popularity),
+            SD = sd(popularity),
+            Min = min(popularity),
+            Q1 = quantile(popularity, prob = 0.25),
+            Median = median(popularity),
+            Q3 = quantile(popularity, prob = 0.75),
+            Max = max(popularity))
+kable(music_for_training2)
+```
+
+The overall shape of the popularity scores is right skewed which distorts linear regression modeling and would probably benefit from a log transformation of the popularity as the response variable. The data has a low (but expectedly so) mean of 18.12675 and standard deviation of 15.91856. The max popularity is 93 while the minimum is 0. The middle 50% of the data resides between a popularity score of 5 and 28, with the median score being 14. 
+
+## Part 3: Model Fitting and Assessment
+
+```{r full-model, cache=TRUE}
+######## WARNING
+### Do NOT edit this Code Chunk
+###   It takes a while to execute but will save
+###   the result for future use (cache=TRUE)
+### Put the summary(full_model) statement
+###   in its own code chunk
+full_model <- lm(popularity ~ key_mode + time_signature + duration_ms +
+                   danceability + energy + loudness +
+                   speechiness + acousticness + instrumentalness +
+                   liveness + valence + tempo,
+                 data=music_for_training)
+autoplot(full_model)
+```
+
+9. The Residuals vs Fitted plot does not look randomly distributed and has what looks like a slanted asymptote that all the points appear above in a large mass group. The Normal Q-Q plot has a very large tail at the bottom of the normality line and points wave away from the line towards the top of the normality line. The Scale-Location plot line has a stready positive slope to it with the data in one massive group instead of randomly spread. The Resiudals vs Leverage plot has many points crossing the 3 standardized residuals threshold and like the other plots, does not look randomly spread. All four of the plots have outlier data points on them as well. The assumptions for this model are not looking so good.
+
+```{r}
+interaction_model <- lm(popularity ~ time_signature + (key_mode)*(duration_ms +
+                   danceability + energy + loudness +
+                   speechiness + acousticness + instrumentalness +
+                   liveness + valence + tempo),
+                 data=music_for_training)
+```
+
+```{r}
+summary(full_model)
+```
+
+9. The overall $F$-test is significant with an $F$-stat of 302.9 on 22 and 99977 degrees of freedom with a $p$-value near zero. Most of the individual t-tests are significant with exception to some of the `key_mode` values. The "C# major", "D Major", "E Major", and "G major" are not significant in this model. I do not think these results are too meaningful since we are dealing with such a large n so that the full model and most variables were bound to be significant. 
+
+```{r}
+full_model.cube <- lm((popularity+1)^(1/3) ~ key_mode + time_signature + duration_ms +
+                   danceability + energy + loudness +
+                   speechiness + acousticness + instrumentalness +
+                   liveness + valence + tempo,
+                 data=music_for_training)
+step.backwards <- step(full_model, direction = "backward")
+```
+
+11. It suggests no modifications to the full model which is interesting since several of the `key_mode` values were not significant, but others were so it is understandable why the variable remained in the model.
+
+```{r}
+full_model2 <- lm(popularity ~ key_mode + time_signature + duration_ms +
+                   danceability + loudness +
+                   speechiness + acousticness +
+                   liveness + valence + tempo,
+                data=music_for_training)
+interaction_model2 <- lm(popularity ~ time_signature + (key_mode)*(duration_ms +
+                   danceability + loudness +
+                   speechiness + acousticness +
+                   liveness + valence + tempo),
+                 data=music_for_training)
+
+tab <- data.frame(Adj.R.Squared = c(summary(full_model)$adj.r.squared, summary(interaction_model)$adj.r.squared, summary(full_model.cube)$adj.r.squared, summary(full_model2)$adj.r.squared, summary(interaction_model2)$adj.r.squared),
+                  AIC=c(AIC(full_model), AIC(interaction_model), AIC(full_model.cube), AIC(full_model2), AIC(interaction_model2)),
+                  BIC=c(BIC(full_model), BIC(interaction_model), BIC(full_model.cube),BIC(full_model2), BIC(interaction_model2)))
+rownames(tab) <- c("Full Model",
+                   "Interaction Model",
+                   "Cubed Full Model",
+                   "Full Model (no energy or instrumentalness)",
+                   "Interaction Model (no energy or instrumentalness)")
+kable(tab)
+```
+
+14. It would be unfair to compare the AIC and BIC of the cubed full model because it would naturally have a lower Residual Sum of Squares since the response variable has been cube rooted. Since you would be calculating the residual sum of squares in the AIC and BIC formulas with data values that would be roughly the cube root of what the other 4 models are producing, the AIC and BIC should be lower with this data and if they aren't, then something is probably messed up.
+
+15. The model that would appear to be the best fit would be the Interaction Model with `energy` and `instrumentalness` included in its model. It has the highest $R^2_a$ out of all models and also the lowest AIC. It does have the highest BIC but overall I believe it to be the best model based on the given output.
+
+## Part 4: Model Prediction
+
+```{r}
+full_model.pred <- predict(full_model, newdata = music_for_testing)
+error <- sqrt(mean((music_for_testing$popularity - full_model.pred)^2))   
+error
+interaction_model.pred <- predict(interaction_model, newdata = music_for_testing)
+error <- sqrt(mean((music_for_testing$popularity - interaction_model.pred)^2))   
+error
+full_model.cube.pred <- predict(full_model.cube, newdata = music_for_testing)
+error <- sqrt(mean((music_for_testing$popularity - full_model.cube.pred)^2))   
+error
+full_model2.pred <- predict(full_model2, newdata = music_for_testing)
+error <- sqrt(mean((music_for_testing$popularity - full_model2.pred)^2))   
+error
+interaction_model2.pred <- predict(interaction_model2, newdata = music_for_testing)
+error <- sqrt(mean((music_for_testing$popularity - interaction_model2.pred)^2))   
+error
+```
+
+17. The interaction model without `energy` or `instrumentalness` appears to be the best model since it has the lowest RSME with 15.25463. The worst model is the full model with the cube rooted response variable which has a much higher RSME relative to the other models at 22.17099.
+
+18. It implies that these models (excluding the cube root) are pretty strong since their RSME values are pretty much identical to the standard deviation of the real data set values. The population variable as a whole had a standard deviation of 15.9 and the model predictions had RSME's of about 15.3 meaning that the prediction made by the model differed by about 15 popularity points. This would suggest that the models are usually within one standard deviation with their popularity prediction of the selected song based on its properties.
+
+```{r}
+interaction_model3.pred <- predict(interaction_model2, newdata = music_to_predict) %>%
+sort(decreasing = TRUE)
+head(interaction_model3.pred, n = 10)
+```
+
+19. The tracks with the highest popularity scores are (beginning with the highest rated): 4490, 4334, 297, 4789, 4525, 999, 4731, 3957, 3364 and 3127. 4490 is at the top with a popularity of 39.55.
+
+```{r}
+ggplot(data=data.frame(popularity = interaction_model3.pred), aes(popularity)) +
+  geom_histogram(binwidth=1)
+```
+
+20. The predicted scores behave as they do because they model has a hard time predicting outliers and music popularity. Some songs become popular for different reasons and it is hard to pinpoint what exactly makes a song popular. Some songs have negative value because in the model their prediction factors are negative based on the song properties and so the songs decrease in popularity into the negatives. The most popular song in our data set is not even at 40 on the popularity scale. The model cannot predict the super high end popularity songs because music can be so similar and just a couple songs with a high popularity will be enough to change the predictors so that if that predictor is higher, then the song is a 90 popularity because the predictor is weighed down so much by other songs with a low popularity. The skewness of the data makes prediction in this case very difficult. I wouldn't necessarily say the output is surprising, but not expected. I understand why it came out the way it did but I would not have thought it would have come out that way before I saw it.

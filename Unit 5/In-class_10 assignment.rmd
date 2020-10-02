@@ -1,0 +1,112 @@
+---
+title: "Class 10: Assignment"
+author: "John Doll"
+date: "Feb 26 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(lindia)
+library(ggfortify)
+```
+
+
+### Crime Rates Example
+
+State-level crime rate data is provided for all US states and the District of Columbia for the year 2008.  All crime rates are expressed as number of crimes per 100,000 residents.  We are interested in variables that are related to the burglary rate.  The data appear in the CSV file `stateCrimeData.csv`. The variables in the data set are:
+
+* `Pop` - Population by state (2008)
+
+Crime variables:
+
+* `Murder` - Murder and non-negligent manslaughter rate (2008)
+* `Rape` - Forcible Rape rate (2008)
+* `Robbery` - Robbery rate (2008)
+* `Assault` - Aggravated Assault rate (2008)
+* `Burglary` - Burglary rate (2008)
+* `VehTheft` - Vehicle Theft rate (2008)
+
+Demographic Variables:
+
+* `UnEmp` - Unemployment Rate (2010)
+* `HSGrad` - Percentage of adult population that graduated from high school (2005)
+* `CollGrad` - Percentage of adult population that graduated from college (2005)
+* `MedianInc` - Median Income for Family of 4 (2005)
+
+Crime Related Expenitures: 
+
+* `Police` - Police Expenditures (2005)
+* `Judicial` - Judicial Expenditures (2005)
+* `Corrections` - Corrections Expenditures (2005)
+
+```{r}
+states <- read.csv("stateCrimeData.csv")
+
+crimedata <- states %>%
+  filter(state != "District of Columbia") %>%
+  select(Pop, HSGrad, CollGrad, UnEmp, MedianInc, Burglary)
+```
+
+
+----
+
+**QUESTION 1:** In the code above, which variables and states are being retained for analysis?
+
+*All states are being retained except for the District of Columbia. The variables being retained are Pop (population by state), HSGrad (percentage of high school graduates), CollGrad (percent of college graduates), UnEmp(percent of unemployed), MedianInc(median income for family of 4), and Burglary(burglary rate).*
+
+----
+
+**QUESTION 2:** Build and interpret a scatterplot matrix of the burglary rate, population and all demographic variables.
+
+```{r}
+ggscatmat(crimedata)
+```
+
+*Based on each of the outputs, no real combination of variables appears to create a linear relationship for the population. The r correlation values seem to reflect this, the strongest r value is only -.49.*
+
+----
+
+**QUESTION 3:** Fit a multiple linear regression model using population and all the demographic variables as predictors.
+
+```{r}
+crimedata2 <- lm(Burglary ~ Pop + HSGrad + CollGrad + UnEmp + MedianInc, data=crimedata)
+autoplot(crimedata2)
+```
+
+----
+
+**QUESTION 4:** How do the regression assumptions look for the model in question 3?  Does it appear necessary to apply a power transformation to the response variable?  Check using Box-Cox.
+
+```{r}
+gg_boxcox(crimedata2)
+```
+
+*The Residuals vs Fitted plot doesn't look great considering the y-axis range for residuals is over 200 in each direction, so some power transformations may be necessary. The Normal Q-Q plot looks alright and the Scale-Location plot looks somewhat decent but possible skewed upward. Residuals vs Leverage also appears to have some problems with the data bringing the line down as the leverage goes on. The boxcox suggests a possible lambda value of 1 so we will move forward since it suggests that the data is normal enough.*
+
+----
+
+**QUESTION 5:**  Interpret the value of the $\beta$-coefficient estimate for the predictor `HSGrad` in your model from question 3.  Write your interpretation completely in problem context. 
+
+```{r}
+summary(crimedata2)
+```
+
+*High School Grad parameter estimate: $\beta_2$=−2.773. When all other predictors are held fixed, the predicted mean burglury rate will decrease by 2.773 points for each additional high school graduate in the population.*
+
+----
+
+**QUESTION 6:**  Find a different combination of population and demographic predictors that results in a model that can predict burglary rates better than the model you fit in Question 3. How are you able to determine that your new combination of predictors is better for predictive purposes?
+
+```{r}
+crimedata3 <- states %>%
+  filter(state != "District of Columbia") %>%
+  select(HSGrad, UnEmp, MedianInc, Burglary)
+crimedata4 <- lm(Burglary ~ HSGrad + UnEmp + MedianInc, data=crimedata3)
+summary(crimedata4)
+```
+
+*My new combination of predictors is better because of the resulting $p$-value. In question 5, the resulting $p$-value is 4.296 x 10^-6^. For my new model in question 6, the resulting $p$-value is 3.953 x 10^-7^. Because my $p$-value is smaller, it means that my selected variables better predict the burglary rate compared to those in question 5.*

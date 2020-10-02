@@ -1,0 +1,150 @@
+---
+title: "Class 22: Assignment"
+author: "John Doll"
+date: "April 15, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+library(knitr)
+library(ggfortify)
+library(lindia)
+library(leaps)
+library(car)
+library(caret)
+
+set.seed(536255)  # for reproducibility across all assignments
+```
+
+### Activity: Developing a good prediction model using CV
+
+What variables are good predictors of how well you can predict the area covered by a forest fire?  This activity is designed to have you bring together various aspects of model building (assumption checking, unusual observations, variable selection) along with cross-validation techniques to come up with a good predictive model for the above using available data.
+
+Your goal is simple: **develop the best statistical model that you can for predicting the area covered by a forest fire.**   The data is in the file `forestfires.csv`.
+
+The following rules apply:
+
+* You must read the accompanying document describing the data (it's real data!) and the variables you have at your disposal.
+* There are many fire events in the data set that were contained before spreading.  These are indicated by having an `area` of 0.  Remove these cases from the data set before you do any statistical work.  (Your analysis will then be a conditional investigation of fire events that did involve spread.)
+* You may use any or all variable selection methods at your disposal (forward stepwise, backward stepwise, best-subsets) to help guide you through model choices.
+* **You must use 5-fold cross-validation as the method of testing any models you consider, and RMSE must be the criterion you use for comparing models.**  *(We set the seed value for random partitioning into training and test data sets, so everyone should have the same partitioning in their cross-validation step.)*
+* At the end of the Markdown document, you must:
+    + indicate what the important predictors are
+    + cite the RMSE (and provide supporting output) for your chosen model. 
+
+----
+
+First, I will read in my data and filter area for any values of 0.
+
+```{r, warning= FALSE}
+fire <- read.csv("forestfires.csv")
+fire <- fire %>%
+  filter(area != 0)
+glimpse(fire)
+ggscatmat(fire)
+```
+
+Looking at this large scatterplot, there appears to be a lot of randomness going on and not a whole lot of correlation except with maybe the `FMCC` variable. `DC` and `DMC` have the largest correlation at .67 which makes sense because in the data description, it says that one measured moisture and one measured drought. In theory those should go hand in hand. Additionally, `temp` and `FMCC` have a moderate positive correlation, FMCC standing for "Fine Fuel Moisture Code". The area variable seems largely unimportant to the scatter plot as it has 0 only one correlation large than magnitude .1. I will do a linear model with all variables included next.
+
+```{r}
+fire.lm <- lm(area ~ month + day + FFMC + DMC + DC + ISI + temp + RH + wind + rain, data = fire)
+autoplot(fire.lm)
+```
+
+Clearly the data has issues in every plot so I will do a boxcox to see if any transformation is recommended. The Residuals vs Fitted plot has a negative slope with points drifting upwards and away. The Normal Q-Q plot tails away at both ends of the line. The Scale - Location plot goes up and down crazy like mountains and valleys across the whole plot. The Residuals vs Factor Levels has several points above 3 standardized residuals away. Hopefully the boxcox has a solution.
+
+```{r}
+gg_boxcox(fire.lm)
+```
+
+Thankfully the boxcox has a solution, and that's to log the data, so that's what we'll do next.
+
+```{r warning= FALSE}
+fire.log <- lm(log(area) ~ month + day + FFMC + DMC + DC + ISI + temp + RH + wind + rain, data = fire)
+autoplot(fire.log)
+```
+
+The log on the response variable made a world of difference and now our residual plots look much better. The Residuals vs Fitted plot is a mostly flat linear line that goes through the center with the data spread randomly about it. The Normal Q-Q plot looks normal. The Scale Location plot looks a million times better and the data is more random. The Residuals vs Factor Levels has most of its data inside the 3 standardized residuals range.
+
+```{r, warning = FALSE}
+fire.log2 <- lm(log(area) ~ month + day + FFMC + DMC + DC + ISI + temp + RH + wind + rain, data = fire[-105, -210, -249])
+autoplot(fire.log2)
+```
+
+Here we see that removing those data points only makes other data points outliers so we will leave the data ponts in. Now it is time to analyze the condense the model.
+
+```{r}
+summary(fire.log)
+```
+
+Looking at the data, we are going to clean up the months and days so that they display in order. But we are also quick to notice that the only variables that significantly predict the area of the fire are `DMC` and `DC` which are also our two most correlated variables. Our model overall is not significant with an $F$-stat of 1.462 on 23 and 246 degrees of freedom and a $p$-value of 0.08377. The residual standard error is 1.497 and the $R^2_a$ is 0.03803 so we definitely have some model selection to do. Once I mutate the data I will go ahead with a backward selection.
+
+```{r}
+fire <- fire %>%
+  mutate(month = factor(month, levels = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",     "nov", "dec")),
+         day = factor(day, levels = c("sun", "mon", "tue", "wed", "thu", "fri", "sat")))
+step.backwards <- step(fire.log, direction = "backward")
+```
+
+Here, after doing the backwards model, we get down to a nice 4 variable model. The backwards model is dependent on `month`, `DMC`, `DC`, and `temp`. We will now run a forwards selection to see how similar they are.
+
+```{r}
+null.fit <- lm(log(area) ~ 1, data = fire)
+step.forwards <- step(null.fit, scope = formula(fire.log), direction = "forward")
+```
+
+So the forwards and backwards models are not similar at all. The forwards model only contains the variable `ISI` which is not even in the backwards model, so we have more model exploring to do. I will now split my data so that I can use 80% to make a model and the other 20% as my data to see how well my forwards, backwards, and full model compare.
+
+```{r}
+trainIndex <- createDataPartition(fire$area, p=0.8, list=FALSE)
+head(trainIndex)
+train.data <- fire %>%
+  filter(row_number() %in% trainIndex)
+test.data <- fire %>%
+  filter(!row_number() %in% trainIndex) %>%
+  mutate(area = as.double(log(area)))
+train.fit <- lm(log(area) ~ DMC + month + DC + temp, data=train.data)
+test.pred <- predict(train.fit, newdata=test.data)
+error <- sqrt( mean((test.data$area - test.pred)^2) )   # Calculation of RMSE
+error
+
+train.fit2 <- lm(log(area) ~ ISI, data=train.data)
+test.pred2 <- predict(train.fit2, newdata=test.data)
+error2 <- sqrt( mean((test.data$area - test.pred2)^2) )   # Calculation of RMSE
+error2
+
+train.fit3 <- lm(log(area) ~ month + day + FFMC + DMC + DC + ISI + temp + RH + wind + rain, data=train.data)
+test.pred3 <- predict(train.fit3, newdata=test.data)
+error3 <- sqrt( mean((test.data$area - test.pred3)^2) )   # Calculation of RMSE
+error3
+```
+
+Looking initially at this data output, we see that the RSME's are all very close, but the second model has a partially better value of 1.309. So at this point, the model with just `ISI` is our best model. Now we will run a 5 fold cross validation for all the models.
+
+```{r, warning = FALSE}
+train_control <- trainControl(method="cv", number=5)
+model1 <- train(log(area) ~ DMC + DC + month + temp, data=fire, trControl=train_control, method="lm")
+model2 <- train(log(area) ~ ISI, data = fire, trControl = train_control, method="lm")
+model3 <- train(log(area) ~ DMC + month + DC + temp + FFMC + month + day + temp + RH + rain, data = fire, trControl = train_control, method="lm")
+results <- resamples(list(Mod1 = model1, Mod2 = model2, Mod3 = model3))
+summary(results)
+```
+
+The smallest RSME value belongs to the first model which is our backwards selection model. It also has the smallest max RSME and second smallest min RSME. I'll plot the data to get a better look at it.
+
+```{r}
+ggplot(results, metric="RMSE")
+bwplot(results)
+```
+
+All models are very close. We can see from the ggplot that the first model has the smallest range, and lowest mean RSME. This will be the model we choose since these graphs and outputs support my model. My important variables are `DMC`, `DC`, `month`, and `temp`. I will run a summary of my data for further proof.
+
+```{r}
+summary(step.backwards)
+```
+
+Here we can see that the model with the variables I chose is significant with and $F$-stat of 2.187 on 12 and 257 degrees of freedom with a $p$-value of 0.012. Once again my significant variables are `DMC`, `DC`, `month`, `temp`.

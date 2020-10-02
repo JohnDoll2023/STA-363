@@ -1,0 +1,148 @@
+---
+title: "Class 08: Assignment"
+author: "John Doll"
+date: "Feb 19 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(emmeans)
+```
+
+## Study
+
+A study was conducted to determine the effects of alcohol on human reaction times. Fifty-seven individuals were recruited for this study and were randomly allocated into one of three alcohol treatment groups -- a **control** where the subjects remain sober during the entire study, a **moderate** group were the subject is supplied alcohol but is limited in such a way that their blood alcohol content remains under the legal limit to drive (BAC of 0.08) and a group that received a **high** amount of alcohol to which their BAC may exceed the legal limit for driving. Each subject was trained on a video game system and their reaction time (in milliseconds) to a visual stimulus was recorded at 7 time points 30 minutes apart (labeled T0=0, T1=30, T2=60 and so on). At time point T0, all subjects were sober and those in one of the alcohol consumption groups began drinking after the first measured reaction time (controlled within the specifications outlined). It is also of interest to the researcher if a subjects age influences reaction time (namely, is reaction time different for those in the 20s versus 30s).
+
+The task for today is to do a complete analysis for this study and dig into the effects that alcohol, age and time have on mean reaction times.
+
+----------------
+
+### Data input and wrangling
+
+First read in the data and peek at the first 6 rows:
+
+```{r}
+alcohol <- read.csv("alcoholReaction.csv")
+head(alcohol)
+```
+
+Note the following:
+
+* The `Age` variable is recorded as an actual numeric age in years, not as categories of 20s or 30s like we want.  So, we will need to dichotomize this variable. 
+* Also note the data is in *wide* format -- the reaction times (the response variables) are spread over multiple time-sepcific columns. We need a way to *pivot* these columns into a single column. 
+
+So, we need to do some data processing.  First, consider the below code:
+```{r}
+head(alcohol %>% 
+       mutate(Age = case_when(Age < 31 ~ "20s",
+                              Age %in% 31:40 ~ "30s")))
+```
+
+`case_when` is essentially a piece-wise comparison. When `Age` is less than 31, you overwrite the `Age` variable with `20s`. If `Age` is in the integers from 31 to 40, you replace the value with `30s`. In this example we used both a `<` comparison and the `%in%` statement we've seen before just to show multiple functionality.
+
+```{r}
+alcohol <- alcohol %>%
+  mutate(Age = case_when(Age < 31 ~ "20s",
+                         Age %in% 31:40 ~ "30s"))
+```
+
+So the `Age` variable has now been categorized. Now, we need to convert the data from *wide* to *long* format. We do this with the `pivot_longer()` function included in `tidyverse`. 
+
+```{r}
+alcohol.long <- alcohol %>%
+  pivot_longer(c(T0, T1, T2, T3, T4, T5, T6), names_to="Time", values_to="Reaction")
+```
+
+**A blurb about pivot_longer().** There are essentially three input arguments into the `pivot_longer()` function:
+
+* *First:* a list of all the columns we want to pivot across -- in this case, T0, T1, T2, T3, T4, T5, and T6.
+* *Second:* `names_to` - creates the name of a *new* variable whose values will correspond to the original names of the pivoted columns
+* *Third:* `values_to` - creates and names a *new* variable that will house the values originally stored in the pivoted columns
+
+```{r}
+# peek at the pivoted data structure
+alcohol.long
+```
+
+You will now note the data is now in a **long** format, which is how we need it expressed for the analysis.
+
+Lastly, so that R doesn't try and treat it as a number, we tell it that the `Subject` variable is a factor (or categorical) variable. We also want to make sure that the factor levels for `Alcohol` are in the order that makes the best sense. 
+
+```{r}
+alcohol.long <- alcohol.long %>%
+  mutate(Subject = as.factor(Subject),
+         Alcohol = factor(Alcohol, levels=c("Control", "Moderate", "High")) )
+```
+
+### Exploratory Data Analysis
+
+There are 2 categories for age, 3 categories for alcohol use and then 7 time points to consider. Essentially $2\times 3\times 7 = 42$ combinations to consider. Rather than look numerically we will consider things graphically.
+
+First we consider a plot of the Reaction times in Time based on Alcohol treatment with Age determining the linetype.
+
+```{r}
+ggplot(alcohol.long) + 
+  geom_line(aes(x=Time, y=Reaction, group=Subject, color=Alcohol, linetype=Age))
+```
+
+With multiple colors and line types, as well as grouping by subject, this plot is crowded with lines. Not only is this plot cluttered, it is hard to determine anything informative.  
+
+**ACTIVITY: Facet the plot.**  In the code chunk below, edit the plot I made above, but instead facet the plot by `Age`. You should also get rid of the `linetype=` argument. Is the resulting plot improved?  Does it still have shortcomings?
+
+*The plot is marginally better, but there does not appear to be a difference between reaction times of people in their 20s vs people in their 30s. If we look hard enough, we can somewhat infer that the control group tends to have a lower reaction time, and the moderate and heavy drinkers look to have slower reaction times by the end of the experiment. But really, it is very hard to decipher what is going on in the graphs.*
+
+```{r}
+ggplot(alcohol.long) +
+  geom_line(aes(x = Time, y = Reaction, group = Subject, color = Alcohol)) +
+  facet_wrap(~Age)
+```
+
+**ACTIVITY: Plot the means.**  To improve the ability to see the factor effects, we can make a plot of the means rather than the raw data, grouping by `Alcohol` group while still faceting by `Age`.  Write code below to do make such a plot, and comment on what you observe in the resulting plot.  We suggest you look back at knitted Markdown from Class 06 for some guidance with code.
+
+```{r}
+ggplot(alcohol.long, aes(x = Time, y = Reaction, group = Alcohol, color = Alcohol)) +
+  stat_summary(fun.y=mean, geom="point") +
+  stat_summary(fun.y=mean, geom="line") +
+  facet_wrap(~Age)
+```
+
+**This is a much clearer and easier tor read graph than the previous plots. We can clearly see that by the end of the experiment, the moderate and heavy drinkers have slower reaction times than the control group. Additionally, we now see what appears to be a difference in the control groups between age, as the people in their 30s seem to have quicker reaction times than those in their 20s. The moderate and heavy drinkers don't appear to be affected by age.**
+
+
+### Model fitting and analysis
+
+Below is the code to fit the repeated measures ANOVA model to the data:
+
+```{r}
+fit <- aov(Reaction ~ Age*Alcohol*Time + Error(Subject/Time), data=alcohol.long)
+```
+
+**ACTIVITY: See the ANOVA results.** In the empty code chunk below, write code that allows you to see a summary of the ANOVA results:
+
+```{r}
+summary(fit)
+```
+
+**ACTIVITY: Interpret the results.**  Using the repeated measures example from Class 07 as a methodological guide, provide a full interpretation of the ANOVA results in problem context.  Perform and interpret any necessary and appropriate follow-up multiple comparisons using the empty code chunk below (Class 06 material might prove useful as a reference for you).
+
+*First, looking at the highest order of interaction between Age, Alcohol, and Time, we see that there is no significant difference due to the $F$-statistic of .950 and $p$-value of .497 on 12 and 306 degrees of freedom. Since this is insignificant, we can look at lower levels of interaction.*
+
+* Immediately, we see that the interaction between Alcohol and Time is significant based on the $F$-statistic of 2.752 and $p$-value of .00145. As time progresses and more alcohol is consumed, the response rate is significantly effected.
+
+* The comparison between Age and Time is not significant based on the $F$-statistic of 1.416 and $p$-value of .20786. As time goes along, age does not effect the response rate significantly.
+
+* The comparison between Age and Alcohol is not significant based on the $F$-statistic of .665 and $p$-value of .519. Age and alcohol consumption do not have a significant effect on response time.
+
+*Now, since we have the significant interaction between alcohol and time for response, we do a multiple comparisons because we have more than 2 times and alcohol levels to evaluate.*
+
+```{r multiple-comparisons-chunk, message=FALSE}
+fit.mc <- emmeans(fit, "trt.vs.ctrl" ~ Time|Alcohol, ref = 1)
+fit.mc$contrast
+plot(fit.mc$contrast)
+```
+
+*From the Dunnett comparison and confidence interval plot, we can see that the only significant interaction between alcohol and time is at the last response check (time = T6) and between the control and high levels for alcohol consumption. We see that it is significant based on the $F$-statistic of 2.348 and $p$-value of 0.42 and based on the confidence interval not including 0 within its range.*
+*(Remember: you are not required to check assumptions using `autoplot` here due to the complexity of repeated measures assumption checking).*

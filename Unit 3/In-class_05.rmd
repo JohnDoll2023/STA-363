@@ -1,0 +1,166 @@
+---
+title: "Class 05: ANOVA with Blocks"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(ggfortify)
+library(emmeans)
+```
+
+# Blocking
+
+In a statistical setting, a **block** is a relatively homogeneous set of experimental material. 
+
+**What does this mean?**
+
+Essentially a block is a known effect or known **confounding** factor in a design but it is something we are not necessarily experimentally interested in. For example, in a before and after paired $t$-test design, the subject under study (e.g., person or animal) can be considered a block. We know each person/animal has their own dynamics/variability but we are not concerned with those, we are interested testing some other factor.
+
+Many things can be a block, today we will consider one specific example.
+
+## Example
+
+A consumer product-testing organization wished to compare the power consumption of five different brands of dehumidifier, labeled 1 to 5. Brand 1 is often promoted as the market leader in power efficiency. The goal of the study is to see if there is significant evidence to support this claim.
+
+It is well known that power consumption depends on the prevailing humidity level, so it was decided to monitor each brand at four different (controlled) humidity levels ranging from moderate to heavy humidity. Within each level, five brands were randomly tested and the power consumptions (kWh) was recorded in `humidity.txt` on the Hughes data repository. There, the first column represents the brand (recorded numerically), the second the humidity level (also recorded numerically) and the third column is the annual power consumption.
+
+Describe the following:
+
+* **Experimental Units in this study?**  *The humidifiers under study are the EUs.*
+* **The factor of interest in this study?** *The factor of interest in this study is the brand of humidifier.*
+* **How many factor levels are there?** *There are five factor levels corresponding to the 5 brands of humidifiers.*
+* **What are the treatments?** *The treatments are each of the five brands.*
+* **What confounding variable is there? How is it controlled?** *The humidity level is a confounding (and known) effect on power consumption. We attempt to control it by using a block design and subjecting each brand of humidifier to one of four humidity levels.*
+* **What other steps were taken to control for nuisance variables and unexplained variability?***It is stated in the description that the humidifiers are randomly subjected to the experimental conditions. This will also help mitigate potential nuisance variables.*
+
+```{r}
+# Note: these data are in a .txt file containing a header row: use read.table()
+humidity <- read.table("http://users.miamioh.edu/hughesmr/sta363/humidity.txt", header=TRUE)
+kable(head(humidity))
+```
+
+Notice the `Brand` and `Humidity` levels are recorded as numerical values. We want to make sure R treats them as factor levels.
+
+```{r}
+humidity <- humidity %>%
+  mutate(Brand = as.factor(Brand),
+         Humidity = as.factor(Humidity))
+```
+
+Ultimately we want to statistically test the following hypotheses:
+
+$$H_0: \mu_1 = \mu_2 = \mu_3 = \mu_4 = \mu_5~~~\textrm{vs.}~~~H_a: \textrm{at least two differ}$$
+where $\mu_i =$ the true mean power consumption for Brand $i$.
+
+### Wrong Analysis
+
+We begin by performing a **WRONG** analysis for this design. Since we are interested in determining if `Brand` influences power consumption, suppose you erroneously decided to perform a One-Way ANOVA to test this hypothesis. First we explore some EDA:
+
+```{r}
+humidity %>% 
+  group_by(Brand) %>%
+  summarize(Mean=mean(Power),
+            SD=sd(Power),
+            N=n()) %>%
+  kable()
+ggplot(humidity) + 
+  geom_boxplot(aes(x=Brand, y=Power)) + 
+  theme_bw()
+```
+
+Based on the EDA, we do see some difference between the four brands, but we also note the high variabilty within each group. This can be seen in the side-by-side boxplots as there is substantial overlap between the boxes. *(Note that we are summarizing 4 observations with 5 summary statistics! It is silly to use boxplots here).*
+
+We proceed (unwittingly) with a One-Way ANOVA:
+
+```{r}
+wrong.analysis <- aov(Power ~ Brand, data=humidity)
+autoplot(wrong.analysis)
+```
+
+The residual analysis actually looks pretty good. The error variability looks constant and the normality assumption looks pretty good. 
+
+```{r}
+summary(wrong.analysis)
+```
+
+So looking at the results we would conclude that the `Brand` does NOT have an influence on power consumption (*p*-value=0.204). Visually we see that maybe Brand 1 is smaller than Brand 5, except a One-Way ANOVA tells us this is not the case. So from this analysis, the claim of better power efficicency for Brand 1 is **not** supported.
+
+**Why is this analysis wrong?**
+
+* In the EDA, building boxplots is silly because we have 4 observations and are summarizing it with 5 measurements!
+* We are completely ignoring the (known) effect humidity level has on power consumption -- in ANOVA we are trying to explain variability (it is called Analysis of *Variance* after all!). The humidity level will explain some of the variability.
+
+### Correct Analysis
+
+We begin with some EDA. Rather than boxplots, we simply plot the observed observations. But since each of the brands was subjected to four levels of humidity, we color the points based on `Humidity` level and we draw some lines connected the `Humidity` levels -- these are known as *profiles*.
+
+```{r}
+ggplot(humidity) + 
+  geom_line(aes(x=Brand, y=Power, col=Humidity, group=Humidity)) + 
+  geom_point(aes(x=Brand, y=Power, col=Humidity), size=3) +
+  theme_bw()
+```
+
+We see the power consumption as a function of `Brand` for each of the `Humidity` levels. We notice a few things: there appears to be an increase in power consumption from Brand 1 to Brand 5 (note, it does not make sense to call this a trend as the *x*-axis is categorical). We also note that power consumption is highest at humidity level 4.  Visually it does appear that Brand 5 likely has the most power consumption with Brand 1 the lowest.
+
+We proceed with a One-Way Block ANOVA, we are building the following model:
+
+$$Y_{ij} = \mu + \tau_i + \beta_j + \varepsilon_{ij}$$
+
+where
+
+* $Y_{ij}$ is the power consumption for Brand $i$ in humidity level (block) $j$.
+* $\mu$ is the overall mean
+* $\tau_i$ is the effect of Brand $i$ on the mean response
+* $\beta_j$ is the effect of humidity level $j$ on the mean response
+* $\varepsilon_{ij}$ is the underlying random noise
+
+We can reformulate our hypothesis test as follows:
+
+$$H_0: \tau_1 = \tau_2 = \tau_3 = \tau_4 = \tau_5 = 0 ~~~\textrm{versus}~~~ H_a: \textrm{at least one } \tau_i \neq 0$$
+
+**IMPORTANT NOTE!!** In R, when performing a block design, we must list the block term **first** after the `~` in the `aov` statement.
+
+```{r}
+correct.analysis <- aov(Power ~ Humidity + Brand, data=humidity)
+```
+
+That's it! We are telling R to model `Power` as a function of `Humidity` and `Brand`. Before performing inference we check the residuals.
+
+```{r}
+autoplot(correct.analysis)
+```
+
+Again, everything looks okay with the residual analysis. There is some minor wonkiness in the variability but nothing systematic, so we proceed with formal inference:
+
+```{r}
+summary(correct.analysis)
+```
+
+You'll note that R automatically reports a $p$-value for the Humidity factor. This is a known effect, so ignore that result!!! We do not care if it is significant or not, as it is a confounding factor and not of interest to the hypothesis we are testing.
+
+We see that `Brand` does have an influence on power consumption ($F$-stat = 95.57 on 4 and 12 degrees of freedom, resulting in a $p$-value$\approx 10^{-9}$). 
+
+Since a difference between Brands has been detected, we can perform a multiple comparison procedure to weed out where the differences are.  Since the purpose of the study was to asses the claim that Brand 1 has lower true mean power consumption than the other brands, a **Dunnett multiple comparison** is appropriate here treating Brand 1 as the "control" (CIs provided).
+
+```{r}
+Dunnett.Brand <- emmeans(correct.analysis, "Brand")
+contrast(Dunnett.Brand, "trt.vs.ctrl", ref=1)
+```
+
+
+```{r}
+confint(contrast(Dunnett.Brand, "trt.vs.ctrl"))
+plot(contrast(Dunnett.Brand, "trt.vs.ctrl"))
+```
+
+All comparisons are significant at the $\alpha$ = 0.05 level, so **the claim of better mean power efficiency for Brand 1 is supported!**  Moreover, from the CIs we can see that Brand 1's closest competitor (with regard to efficiency) is Brand 3, and Brand 1 consumes between 17.9 to 65.1 fewer kWh on average than Brand 3.
+
+**Morals of the story:**
+
+* The correct statistical analysis to do in a designed experiment is dictated by the design of the experiment itself!
+* Misidentifying the structure of an experimental design can lead to erroneous conclusions about the factors under study.

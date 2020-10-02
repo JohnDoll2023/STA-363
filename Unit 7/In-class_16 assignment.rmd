@@ -1,0 +1,106 @@
+---
+title: "Class 16: Assignment"
+author: "John Doll"
+date: "Mar 18 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(lindia)
+library(ggfortify)
+```
+
+
+### Example: The effect of smoking on the birth weight of newborns
+
+The data set `babies.RData` contains information on the birth weights of newborns and if the mother has a history of smoking or not.  The weight of the mother at the time of delivery is also provided.  The goal of the study is to investigate the hypothesis that smoking is associated with lower average birth weight in babies.
+
+The variables are:
+
+* `momwt` - Weight of the mother (in pounds) at the time of delivery
+* `smoker` - Smoking status of the mother (a logical variable)
+* `babywt` - Birth weight of a newborn (in ounces)
+
+We load the data and fit the two different models from the in-class discussion:
+
+```{r}
+load("babies.Rdata")
+
+ancova.model1 <- lm(babywt ~ momwt + smoker + momwt:smoker, data=babies)
+summary(ancova.model1)
+
+ancova.model2 <- lm(babywt ~ momwt + smoker, data=babies)
+summary(ancova.model2)
+```
+
+----
+
+### QUESTIONS
+
+Answer the following, and include justification based on the output:
+
+**Question 1.** Predict, with 95% confidence, the birth weight of a newborn born of a mother weighing 128.54 pounds who has a history of smoking. Interpret the interval in context. (How does this compare to the first CI we got above?)
+
+*ANSWER:*
+```{r}
+mean(babies$momwt)
+predict(ancova.model2, newdata=data.frame(momwt=128.54, smoker=TRUE), int="conf")
+```
+
+We can be 95% confident that the true mean birth weight of babies from mothers of average weight with a smoking history is between 115.5 oz to 118.3 oz.
+
+
+----
+
+**Question 2.** Predict, with 95% confidence, the birth weight of a newborn born of a mother weighing 180 pounds who has a history of smoking. Interpret the interval in context.
+
+*ANSWER:*
+```{r}
+predict(ancova.model2, newdata=data.frame(momwt=180, smoker=TRUE), int="conf")
+```
+
+We can be 95% confident that the true mean birth weight of babies from mothers of average weight with a smoking history is between 120.6 oz to 126.4 oz.
+
+
+----
+
+**Question 3.** Using the interaction model instead, re-do question 2.  How does the result compare when using the earlier model?
+
+*ANSWER:*
+```{r}
+predict(ancova.model1, newdata=data.frame(momwt=180, smoker=TRUE), int="conf")
+```
+
+We can be 95% confident that the true mean birth weight of babies from mothers of average weight with a smoking history is between 119.6 oz to 127.3 oz. <br>
+
+When using this model, the range is wider and leans more towards the baby being born heavier.
+
+----
+
+**Question 4.** Refer to the interaction model we first fit above. Using output from R, write out the fitted model for the mean response for **non-smoking mothers**, and also for **smoking mothers**.  Simplify the answers as much as possible.  
+
+*Non-Smoking:  babywt = 105.84 + 0.12(momwt)* <br>
+*Smoking:  babywt = 105.84 + 0.12(momwt) -5.187(smokerTRUE) - 0.003(momwt:smokerTRUE) which simplifies too:* <br>
+*Smoking:  babywt = 100.653 + .117(momwt)*
+
+
+
+----
+
+**Question 5.** Now refer to the main effects model.  Using output from R, write out the fitted model for the mean response for **non-smoking mothers**, and also for **smoking mothers**.  Simplify the answers as much as possible. 
+
+*Non-Smoking:  babywt = 106.05 + .13(momwt)* <br>
+*Smoking:  babywt = 106.05 + .13(momwt) - 5.6(smokerTRUE) which simplifies to:* <br>
+*Smoking:  babywt = 100.45 + .13(momwt)*
+
+
+
+----
+
+**Question 6.** Compare the results in questions 4 and 5.  What are a couple of things you notice between the different model representations?
+
+*The intercepts are very very similar, they are only off by less than 0.5. Similarly, the momwt weight variable coefficent only differs by .01 between models, so those coefficients are also very close. The smokerTRUE coefficient, following the trend, is also extremely similar in both models. What is different between the models is interaction coefficient which is only present in the first model, which has the smallest coefficient out of any coefficients in both models. Overall, the two models when compared between the same mean variable, are very similar to each other.*

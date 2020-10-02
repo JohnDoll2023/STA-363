@@ -1,0 +1,61 @@
+---
+title: "Class 23: Assignment"
+author: "John Doll"
+date: "April 20, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(tidyverse)
+library(ggfortify)
+library(gridExtra)
+library(knitr)
+```
+
+
+**Revisit the Youth Risk data.**  Below we provide the code to create the `riskdata` data set that we saw in class when discussing odds.As a reminder, it uses the dataset `YouthRisk2007.csv` derived from the 2007 Youth Risk Behavior Surveillance System (YRBSS), which is an annual survey conducted by the Centers for Disease Control and Prevention (CDC) to monitor the prevalence of health-risk youth behaviors. The variables are:
+
+* `ride.alc.driver`: Did the youth ride with a drinking driver in past 30 days?
+* `female`: Is the youth a female?
+* `grade`: Year in high school (9, 10, 11, or 12)
+* `age`: Age (in years)
+* `smoke`: Did the youth ever smoke?
+* `driver.license`: Does the youth have a driver’s license?
+
+```{r}
+riskdata <- read.csv("YouthRisk2007.csv")
+
+riskdata <- riskdata %>%
+  mutate(grade = factor(grade)) %>%
+  drop_na()
+```
+
+
+*ANSWER THE FOLLOWING* with justification based on the output:
+
+----
+
+**Question 1**. What are the odds that a smoker recently rode with a drunk driver?  What about a non-smoker?
+
+```{r}
+xtabs(~smoke + ride.alc.driver, data=riskdata)
+```
+
+*ANSWER HERE: 2797/3781 = 0.7397*
+
+----
+
+**Question 2**. What are the odds that a male recently rode with a drunk driver?  What about a female?
+
+```{r}
+xtabs(~female + ride.alc.driver, data=riskdata)
+```
+
+*ANSWER HERE: 1196/4626 = 0.2585*
+
+----
+
+**Question 3**. Between smoking and gender, which one of these two variables seems like it has a larger effect on this risky behavior of riding with a drunk driver?
+
+*ANSWER HERE: Smoking because the odds that you smoke and ride with a drunk driver are much higher than the odds dealing with gender.*

@@ -1,0 +1,124 @@
+---
+title: "Class 02: Assignment"
+author: "John Doll"
+date: "Jan 29 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Now you get the opportunity to perform a similar analysis as the example we covered in class today. Below is out an outline of your expectations. The primary task for today is to take the supplied code in the example and modify it for the specific problems we outline below. Some code is provided and space is included for all the *code chunks* needed to do the assignment.
+
+## Load the packages
+
+First we load the necessary packages (nothing for you to do here!)
+
+```{r, message=FALSE}
+library(tidyverse)
+library(knitr)
+```
+
+
+## Part 1 - Data Input
+
+In the below code chunk, provide code to properly input the data and modify any variables so they are processed correctly (i.e., numeric to factor)
+
+```{r}
+evals <- read.csv("http://users.miamioh.edu/hughesmr/sta363/teachingEvals.csv") %>%
+ mutate(Term = as.factor(Term),
+         Instructor=as.factor(Instructor),
+         Course=factor(Course, 1:4, labels=c("FSB Core", "MKT Core", "MKT Elective", "MKT Capstone")))
+```
+
+
+## Part 2
+
+We will eventually perform a two-sample $t$-test to compare the Welcoming of Students' Questions (`iWelcQues`) rating for Instructors coded 6291 and 6919. In the next chunk author some code to filter down to the relevant and necessary data.
+
+```{r}
+evals2017 <- evals %>% 
+  filter(Instructor %in% c("6291", "6919")) %>%
+  select(Instructor, iWelcQues)
+
+```
+
+## Part 3
+
+Compute the mean, standard deviation and 5-number summary for the Welcoming of Students' Questions rating for the two instructors under study.
+
+```{r}
+evals2017 %>%
+  group_by(Instructor) %>%
+  summarize(Mean=mean(iWelcQues),
+            SD=sd(iWelcQues),
+            Min=min(iWelcQues),
+            Q1 = quantile(iWelcQues, prob=0.25),
+            Median=median(iWelcQues),
+            Q3 = quantile(iWelcQues, prob=0.75),
+            Max=max(iWelcQues))
+```
+
+## Part 4
+
+In the next code chunk construct a graphic to compare the teaching evaluations for Instructors 6291 and 6919 based on the Welcoming of Students' Questions metric.
+
+```{r}
+ggplot(evals2017, aes(x=Instructor, y=iWelcQues)) + 
+  geom_boxplot() + 
+  stat_summary(fun.y=mean, geom="point", shape=23, size=3, fill="gray60") + 
+  theme_minimal()
+```
+
+What are your findings based on the graphic from Part 4 and the numeric summary in Part 3?
+
+**Instructor 6291 has a lower value for the mean and every category in the five number summary. Instructor 6919 appears to have a higher satisfactory rating than instructor 6291.**
+
+## Part 5
+
+Perform the appropriate $t$-test (equal or unequal variance assumption) comparing the teaching evaluations for the two instructors.
+
+```{r}
+t.test(iWelcQues ~ Instructor, data=evals2017, var.equal=FALSE)
+```
+
+Did you choose an equal variance or unequal variance test? Why?
+
+**Unequal variance because the two instructors do not seem to have the same rating.**
+
+What are the findings from this test?
+
+**There is a statisical significance in the true mean instructor rating with regards to the ability of the instructor to welcome questions from the students. (*p*-value =  2.857e-09) Moreover, we can be 95% confident that the true mean instructor rating in this area is between -0.657602 to -0.363648 points higher for instructor 6291 than for instructor 6919.**
+
+## Part 6
+
+Assess the normality assumption for the performed $t$-test in the below code chunk
+
+```{r}
+ggplot(evals2017) + 
+  geom_qq(aes(sample=iWelcQues) ) + 
+  geom_qq_line(aes(sample=iWelcQues)) + 
+  facet_wrap(~Instructor)
+```
+
+Do you have any concerns about the Normality assumption? What does this imply about the test if anything.
+
+**Both plots appear to be normal. This would just help to confirm that our test is accurate.**
+
+## Part 7
+
+**NOTE: This part is arguably the hardest part of this assignment and will require you to do a little bit of problem solving.**
+
+Write code using a comination of `group_by()` and `summarize()` statements to determine the five instructors who, on average, have the lowest teaching evaluation for Demonstrated Concern for Student Learning (`iDemo`). **Feel free to google for help**
+
+```{r}
+evals[order(evals$iDemo),] %>%
+  group_by(Instructor) %>%
+  summarize(mean(iDemo)) %>%
+  top_n(-5)
+```
+
+Which 5 instructors have the lowest average evaluations for demonstrated concern for student learning?
+
+**Instructors 6090, 6291, 6987, 6995, and 7523.**

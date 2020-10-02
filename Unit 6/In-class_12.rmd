@@ -1,0 +1,204 @@
+---
+title: "Class 12: Estimation and Prediction in Regression"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(ggfortify)
+library(GGally)
+```
+
+## Manatees revisted
+
+Recall the manatee data from before:
+
+```{r}
+manatees <- read.csv("manatee.csv")
+manatee.fit <- lm(ManateesKilled ~ BoatsRegistered, data=manatees)
+autoplot(manatee.fit)
+```
+
+The assumptions look pretty good:
+
+* **Linearity:** Nothing concerning about linearity from the smoothed line in Residuals vs Fitted
+* **Homogeneous error variance:** No clear overly concerning systematic pattern in the residuals in the Residuals vs Fitted or Scale-Location
+* **Normality:** looks great according to QQ-Plot
+
+Let's look at the summary of the fitted model:
+
+```{r}
+summary(manatee.fit)
+```
+
+We see:
+
+* The number of boats registered is a sigificant predictor for the number of manatees killed ($F$-stat of 291.2 on 1 and 38 degrees of freedom, or the $t$-stat of 17.064, both with a $p$-value of near 0)
+* The model including the number of boats registered explains about 88\% of the variability in the number of manatees killed per year.
+
+Let's visually look at the fitted model, represented by the plotted estimated regression equation:
+
+```{r}
+manatees <- manatees %>%
+  mutate(Fitted = fitted(manatee.fit))
+ggplot(manatees) + 
+  geom_point(aes(x=BoatsRegistered, y=ManateesKilled) ) +
+  geom_line(aes(x=BoatsRegistered, y=Fitted), color="royalblue") + 
+  labs(x="Boats Registered (100s)", y="Manatees killed by motorboats") + 
+  theme_bw()
+```
+
+We saw in the previous lecture that we can build confidence intervals for the coefficients in our model
+
+$$ManateesKilled = \beta_0 + \beta_1(BoatsRegistered) + \varepsilon$$
+
+```{r}
+confint(manatee.fit)
+```
+
+**Interpretations:**
+
+* With 95\% confidence, 100 more boats registered (1 unit), will result in approximately 0.1168 to 0.1483 manatees killed. To phrase another way, for every 10,000 boats registered (100 units), you can be confident that between approximately 11.7 to 14.8 manatees would be killed.
+* The CI for the intercept has no meaningful interpretation here.
+
+----
+
+### Confidence Bands
+
+We can incorporate the information in the confidence limits for both the slope and intercept terms to build a **confidence "interval" for the entire line.** The result is known as a **confidence band** that provides confidence boundaries for the **estimation of the mean value of the response at a particular $X$ value**. 
+
+We can extract this band around our line from the `predict()` function in R:
+
+```{r}
+head(predict(manatee.fit, interval="confidence"))
+```
+
+The cases you see displayed above correspond to the first 6 cases (rows) of the data set.  The first column above is the fitted values (i.e. the model-generated predicted values for $Y$), and the second and third columns are the corresponding lower and upper 95% confidence limits.  We can extract these columns and use them for plotting:
+
+```{r}
+manatees <- manatees %>%
+  mutate(Lower.CI = predict(manatee.fit, interval="conf")[,2],
+         Upper.CI = predict(manatee.fit, interval="conf")[,3])
+ggplot(manatees) + 
+  geom_point(aes(x=BoatsRegistered, y=ManateesKilled)) +
+  geom_line(aes(x=BoatsRegistered, y=Fitted), color="royalblue") + 
+  geom_line(aes(x=BoatsRegistered, y=Lower.CI), color="red") + 
+  geom_line(aes(x=BoatsRegistered, y=Upper.CI), color="red") + 
+  labs(x="Boats Registered (100s)", y="Manatees killed by motorboats") + 
+  theme_bw()
+```
+
+Note the fanning type appearance you see in the confidence bands (think about how the line will change if the intercept and slope and stretched to their confidence limits).
+
+We can make a similar plot by adding a `geom_ribbon` object:
+
+```{r}
+ggplot(data=manatees) + 
+  geom_ribbon(aes(x=BoatsRegistered, ymin=Lower.CI, ymax=Upper.CI), fill="gray60") + 
+  geom_point(aes(x=BoatsRegistered, y=ManateesKilled) ) +
+  geom_line(aes(x=BoatsRegistered, y=Fitted), color="royalblue") + 
+  labs(x="Boats Registered (100s)", y="Manatees killed by motorboats") + 
+  theme_bw()
+```
+
+### Prediction bands
+
+The above work is all about building a confidence interval around our fitted line. Essentially, confidence bands are "intervals" around the fitted line. A similar, but fundamentally different, question is to use the fitted line to **make predictions for individual future observations**. For instance, suppose 784 hundred boats were registered in the state of Florida: how many manatees would you predict will be killed? 
+
+We can use our fitted line to answer this question and also build an interval *around* that prediction. This is known as a **prediction interval.** We use the `predict()` function here as well, but now we must specify the new data to predict:
+
+```{r}
+predict(manatee.fit, newdata=data.frame(BoatsRegistered=784), interval="pred")
+```
+
+**Interpretation:** We predict, with 95% confidence, that between 41.544 and 79.165 manatees (i.e. 41 to 80) will be killed when 784 hundred boats (i.e. 78,400) are registered. Note how much wider this range is when compared to the earlier confidence band -- since we are predicting a non-observation (compared to building a confidence interval around an observed point) we have more uncertainty, and thus a wider interval.
+
+We could repeat this process for all points and build a **prediction band** for the model:
+
+```{r}
+manatees <- manatees %>%
+  mutate(Lower.PI = predict(manatee.fit, interval="pred")[,2],
+         Upper.PI = predict(manatee.fit, interval="pred")[,3])
+ggplot(data=manatees) + 
+  geom_ribbon(aes(x=BoatsRegistered, ymin=Lower.PI, ymax=Upper.PI), fill="gray80") + 
+  geom_ribbon(aes(x=BoatsRegistered, ymin=Lower.CI, ymax=Upper.CI), fill="gray60") + 
+  geom_point(aes(x=BoatsRegistered, y=ManateesKilled) ) +
+  geom_line(aes(x=BoatsRegistered, y=Fitted), color="royalblue") + 
+  labs(x="Boats Registered (100s)", y="Manatees killed by motorboats") + 
+  theme_bw()
+```
+
+### Extrapolation
+
+We have a fitted line acting as our model. You may recall from earlier mathematics courses that this line will continue out to $-\infty$ to $+\infty$-- thus extending to points far outside the feasible region of context. If we were to use our fitted model to predict outside the scope of our data, we are doing what is known as **extrapolation**.
+
+**In general, extrapolation should be avoided if at all possible ... particularly when well outside the scope of our data.**  Why?  Ask these questions:
+
+* How many manatees do you expect to be killed when there are 1100 hundred (= 110,000) boats registered?
+* How many manatees do you expect to be killed when there are 5000 hundred (= 500,000) boats registered?
+
+The first situation is outside the scope of our data, but not too extreme. The second example is just silly but the computer will calculate for us (remember, computers are dumb!):
+
+```{r}
+predict(manatee.fit, interval="pred", newdata=data.frame(BoatsRegistered=c(1100, 5000)))
+```
+
+Note the range in the 95\% prediction interval for the extreme cast of extrapolation. We can visualize extrapolation but creating some data from which to `predict` using our fitted model.
+
+```{r}
+fake.boats <- data.frame(BoatsRegistered=seq(0,5000,100))
+fake.boats <- fake.boats %>%
+  mutate(PredictedManatee = predict(manatee.fit, newdata=fake.boats),
+         Lower.PI = predict(manatee.fit, newdata=fake.boats, interval="pred")[,2],
+         Upper.PI = predict(manatee.fit, newdata=fake.boats, interval="pred")[,3])
+ggplot(fake.boats) + 
+  geom_ribbon(aes(x=BoatsRegistered, ymin=Lower.PI, ymax=Upper.PI), fill="gray80") + 
+  geom_line(aes(x=BoatsRegistered, y=PredictedManatee), color="royalblue", size=1.25) + 
+  geom_point(data=manatees, aes(x=BoatsRegistered, y=ManateesKilled) ) + 
+  labs(x="Boats Registered (100s)", y="Manatees killed by motorboats") + 
+  theme_bw()
+```
+
+----
+
+## Patient Satisfaction data revisited
+
+Let's make a couple of predictions for future patients using the patient satisfaction model we already fitted.  First recall:
+
+```{r}
+patsatdat <- read.table("patientsatisfaction.txt", header=TRUE)
+ggscatmat(patsatdat)
+mr.model1 <- lm(satis.index ~ age + ill.sev.index + anx.index + sex, data=patsatdat)
+autoplot(mr.model1)
+```
+
+Overall we saw nothing too concerning in the residual plots. Constant variance looks reasonably met, as does normality. So, check the model summary:
+
+```{r}
+summary(mr.model1)
+```
+
+* Overall, the model significantly predicts patient satisfaction ($F$-stat of 22 on 4 and 41 degrees of freedom, $p$-value$\approx 10^{-10}$).
+* There is evidence that illness severity, anxiety severity and gender do not have much influence on satisfaction level (each is insignificant via the $t$-test when included with the other variables)
+* The model explains about 65\% of the variability in patient satisfaction scores.
+
+### Estimation/Prediction in multiple regression models
+
+It is not possible to plot the confidence or prediction bands in this case, but we can generate the confidence intervals and prediction intervals nonetheless. 
+
+**QUESTION.** Find a 95% prediction interval (PI) for the satisfaction score of a 47 year-old male with an illness index of 54 and an anxiety index of 2.5. Do the same for a 37 year-old female with an illness index of 48 and anxiety index of 2.3.
+
+*Solution:*
+
+```{r}
+new.patients <- data.frame(age = c(47, 37),
+                           ill.sev.index = c(54, 48),
+                           anx.index = c(2.5, 2.3),
+                           sex=c(0, 1))
+predict(mr.model1, newdata=new.patients, interval="pred")
+```
+
+We can be 95% confident that the first patient would have a satisfaction score of between 26.1 to 68.5, and the second patient between 42.9 and 85.2.

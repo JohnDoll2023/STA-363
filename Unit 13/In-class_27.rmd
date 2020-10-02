@@ -1,0 +1,258 @@
+---
+title: "Class 27: Poisson Regression for Count Responses"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(ggfortify)
+library(lindia)
+```
+
+## Goals
+
+Today we will introduce another type of generalized linear model known as **Poisson Regression** (not *poison!*). In doing so, we will also **review** many topics we have covered from the class, including:
+
+* Some basic *exploratory data analysis*
+* Checking *model assumptions*
+* Model *building* and *variable selection*
+* Assessing *model fit*
+* *Interpreting* model output
+* Using a model to *predict*
+
+----
+
+## Data example
+
+The file `westnilesc.txt` contains county level data for South Carolina on the number of cases of west nile virus in birds and equines (i.e. horses) along with the number of farms, area (in square miles), population (number of residents) and human density (residents per square mile) within each county. The "positive bird rate" is calculated as the number of bird cases divided by the human density and the "positive equine rate" is calculated as the number of equine cases divided by the number of farms.
+
+Today, we will attempt to model the number of birds found to be infected with the West Nile Virus.
+
+```{r}
+nileVirus <- read.table("westnilesc.txt")
+names(nileVirus) <- c("County", "State", "Bird.cases", "Equine.cases", "Farms", "Area", "Population", "Human.density", "Positive.bird.rate", "Positive.equine.rate")
+```
+
+We begin by looking at the distribution of the number of bird cases. First, we consider some numeric summaries:
+
+```{r}
+nileVirus %>%
+  summarize(Mean.Cases = mean(Bird.cases),
+            SD.Cases = sd(Bird.cases),
+            Min.cases = min(Bird.cases),
+            Q1.cases = quantile(Bird.cases, probs=0.25),
+            Med.cases = median(Bird.cases),
+            Q3.cases = quantile(Bird.cases, probs=0.75),
+            Max.cases = max(Bird.cases))
+```
+
+We also will look at our data using a simple histogram (here I specify the binwidth to 1 since we have discrete counts).
+
+```{r}
+ggplot(nileVirus, aes(x=Bird.cases) ) + 
+  geom_histogram(binwidth=1)
+```
+
+Note the general shape of this distribution (right skewed with a peak around 1-2 birds in each county). Furthermore, several counties report zero cases of the virus in birds. **Our goal for today is to try and predict the number of bird cases based on the other variables.**
+
+It is also worthwhile to observe a scatterplot of the variables:
+
+```{r}
+ggscatmat(nileVirus)
+```
+
+**QUESTIONS** 
+
+  1. **Should `Positive.bird.rate` be a predictor variable to predict the number of `Bird.cases`?**  No, since `Positive.bird.rate` is calcualted based on the response `Bird.cases`. 
+  2. **Is there any potential for multicollinearity problems among the candidate predictors?** Yes, some predictors have moderate linear correlation or strong correlation, for example `Population` and `Human.density`. 
+
+-----------------------------------------------------
+
+### Linear Regression - a "first try"
+
+Let's start by fitting a full multiple linear regression model. We will then check the residuals.
+
+```{r, error=TRUE}
+fit1 <- lm(Bird.cases ~ Equine.cases + Farms + Area + Population + Human.density + Positive.equine.rate, data=nileVirus)
+autoplot(fit1)
+```
+
+**QUESTION** - Assess the standard assumptions:
+
+* **Independence** - Satisfied based on data collection. Birds within each county should be (reasonably) independent.
+* **Constant variance** - From Residuals vs Fitted, fan shape and scale-location, increasing trend.
+* **Normality** - The points are away from the straight line.
+* **Linearity** - Curvature in the residuals vs fitted
+
+Let's consider a Box-Cox transformation:
+
+```{r, error=TRUE}
+gg_boxcox(fit1)
+```
+
+This code will not run, because at $\lambda=0$ you are attempting to take a log transformation of 0, which does not exist. What to do?
+
+#### Count data - a trick
+
+Even though we cannot fully assess the Box-Cox transformation approach, a fairly standard *trick* in statistics when dealing with response data comprised of small counts is to consider a **square root transformation** (more on this below). Here we refit the linear regression model with the response variable being transformed this way:
+
+```{r}
+fit1 <- lm(sqrt(Bird.cases) ~ Equine.cases + Farms + Area + Population + Human.density + Positive.equine.rate, data=nileVirus)
+autoplot(fit1)
+```
+
+Our residual plots overall look better but note there is still some indication of issues with the variance based on the Scale-Location plot and the Residuals vs Leverage. Further, think about how the data is being transformed.
+
+* The square root of 0 and 1 is 0 and 1, respectively. That is, we are not changing these values.
+* All other response variables are being scaled-down ($\sqrt{2}\approx 1.44$, $\sqrt{3}\approx 1.73$). 
+
+Although the square root transformation tends to help, it is not quite *"correct"*.
+
+----
+
+### An alternative approach: Poisson Regression
+
+First, some background!
+
+#### Poisson distribution
+
+In your introductory statistics course, you discussed at least two probability distributions: the **Binomial** and the **Normal** distributions. A third common distribution (*maybe* covered in your Introductory Statistics course) is the **Poisson** distribution, named for Siméon Denis Poisson. The distribution is defined as follows for a random variable $Y$:
+
+$$P(Y = k) = \frac{\lambda^k e^{-\lambda}}{k!}, ~~~\textrm{for } k = 0, 1, 2, \ldots$$
+
+The key thing to take away from this formula is the values of $k = 0, 1, 2, 3, \ldots$. That is, the random variable $Y$ can only take on **non-negative count values** (just like in our bird data). Because of this, Poisson is one of two distributions that are commonly used to model count data (the other is called the *negative binomial* distribution). The Poisson distribution also has the interesting property that
+
+$$E[Y] = Var[Y] = \lambda$$
+
+That is, the theoretical mean and theoretical variance are the same (this property is important later). This value, typically denoted with a $\lambda$, is known as the **rate**. (Also of importance to note here is that the Poisson rate $\lambda$ is **not** the same thing as the $\lambda$ we encountered in Box-Cox transformations ... just an unfortuante use of the same symbol in two different settings.)
+
+<!--Other interesting things about the Poisson distribution:
+
+* If $Y \sim Bin(n,p)$ where $np\to c$ as $n\to\infty$, then $Y$ is a Poisson random variable with $\lambda = np$. That is, if you had a binomial experiment with a large number of trials (big $n$) and fairly small probability of success (such that $np$ is roughly a constant), then the experiment can be considered a Poisson experiment.
+* For large values of $\lambda$ (typically if $\lambda > 10$), the Poisson distribution can be well-approximated by a Normal distribution.
+* If $Y$ is a Poisson random variable, then $\sqrt{Y}$ has an approximate Normal distribution (thus why the $\sqrt{Y}$ transformation is sometimes used) and tends to be a better approximation for larger values of $\lambda$.-->
+
+----
+
+### Back to modeling
+
+Our response variable is a count (with relatively small values, mostly 0, 1, 2 and 3). Based on the results of our earlier linear regression above (even with the transformation), there are some concerns about the appropriateness of a standard linear regression. So, we will consider fitting a Poisson regression instead! This is similar to the logistic regression idea, except here we are fitting the model:
+
+$$\lambda = E[Y] = e^{\beta_0 + \beta_1 X_1 + \ldots + \beta_p X_p}$$
+
+or alternatively,
+
+$$\log(\lambda) = \log(E[Y]) = \beta_0 + \beta_1 X_1 + \ldots + \beta_p X_p$$. 
+
+That is, **we use a log link function** and fit a generalized linear model (much like we used a logit link function and fit a generalized linear model for logistic regression last week). To do this in R is quite simple:
+
+```{r}
+fit2 <- glm(Bird.cases ~ Equine.cases + Farms + Area + Population + Human.density + Positive.equine.rate, data=nileVirus, family=poisson)
+
+# standard summary output, including beta parameter estimates
+summary(fit2) 
+
+# Full-model LRT test of significance
+null.fit <- glm(Bird.cases ~ 1, data=nileVirus, family=poisson)
+anova(null.fit, fit2, test = "LRT")  
+
+# LRT tests for individual model terms
+drop1(fit2, test = "LRT")  
+```
+
+We can perform Likelihood Ratio Tests for the full model (using `anova()`) and individual predictors (using `drop1()`). The output is very similar to the logistic regression output.  In the above output, you'll note it appears two variables are not significant predictors for the response. We can systematically go through and fit models by filtering predictors, OR....
+
+#### Automated model selection
+
+Recall that earlier we used stepwise procedures as a way of helping us pick variables and build models. We can use the same techniques with generalized linear models. Below we perform **both** a backward *and* forward stepwise procedure (the stepwise output has been turned off).
+
+```{r}
+fit3 <- step(fit2, direction="backward", trace=FALSE)
+null.fit <- glm(Bird.cases ~ 1, data=nileVirus, family=poisson)     # needed for forward selection
+fit4 <- step(null.fit, scope=formula(fit2), direction="forward", trace=FALSE)
+```
+
+So `fit3` is a backward selection model result and `fit4` is a forward selection model result.  Let's look at the output of the resulting two models:
+
+```{r}
+summary(fit3)
+summary(fit4)
+```
+
+**QUESTION: Which of these two model results would you prefer, and why?** `fit3`, since it has smaller AIC and it is a simpler model. 
+
+----
+
+### Assessing the fit of a Poisson Regression model
+
+So now we bring on the question: *is this model any good?*
+
+In linear regression, to assess the fit of a model we considered measures such as the Coefficient of Determiniation ($R^2$), or the root mean squared error from a validation set, or the residual standard error.
+
+In generalized linear models, we typically look at the **Residual deviance** of the fit. Essentially, a comparison of the "Residual deviance" to the "Null deviance" is analogous to looking at $R^2$ (we mentioned this for logistic regression). In Poisson regression, there is the added twist, namely $E[Y] = Var[Y]$ for a Poisson random variable $Y$. That is, the mean (the fitted model) and the variance should be approximately equal. 
+
+A quick way to assess this is by **comparing the Residual deviance to its degrees of freedom**, that is $111.31/41$ = `r 111.31/41`. If all is well (i.e. if a Poisson regression is appropriate), this value should be close to 1. If the ratio is greater than 2, this typically indicates a problem known as **overdispersion** (outside the scope of this class).
+
+----
+
+### Interpreting the coefficients
+
+We have settled on the model `fit3` which includes four variables `Equine.cases`, `Farms`, `Area`, and `Human.density`. There is also an intercept to consider.  Let's consider interpreting each of the parameters, but first let's look at the written out form of the fitted model `fit3`:
+
+$$\log(\hat{E[Y]}) = \log(\hat{\lambda}) = 0.39923 +0.24486(Equine.cases) - 0.00095(Farms) +  0.00111(Area) + 0.00341(Human.Density)$$
+
+Interpretations: 
+
+```{r echo=FALSE}
+coef3 = coef(fit3)
+```
+
+
+* When there are zero equine cases, zero farms, zero area and zero human density, we would expect $\exp(0.39923)\approx$ `r exp(coef3[1])` cases of West Nile Virus in birds per county in South Carolina. (Obviously not a realistic scenario).
+
+* For every 1 unit increase in Human density (i.e. each additional resident per square mile) while holding other variables constant, we would expect the log average of Bird cases to increase by 0.00341 units. **OR,** for each additional resident per square mile while holding other variables constant, you would expect the number of bird cases to increase by a multiple of $\exp(0.00341)\approx$ `r exp(coef3[5])`. 
+
+* For every 1 additonal case of West Nile in horses while holding other variables constant, we would expect the number of bird cases to increase by a multiple of $\exp(0.24486)\approx$ `r exp(coef3[2])`.
+
+* For every 1 additional number of farm while holding other variables constant, we would expect the number of bird cases to decrease by a rate of $\exp(-0.00095)\approx$ `r exp(coef3[3])`.
+
+* For every 1 additional square mile of area while holding other variables constant, we would expect the number of bird cases to increase by a multiple of $\exp(0.00111)\approx$ `r exp(coef3[4])`.
+
+
+**QUESTION: Re-interpret the `Human.density` coefficient, but rescaled to estimate the change in number of bird cases of West Nile Virus for an additional 50 residents per square mile.**  For an additional 50 residents per square mile, we would expect the number of bird cases to increase by a multiple of $\exp(50*0.00341)\approx$ `r exp(50*coef3[5])`
+
+----
+
+### Prediction
+
+Suppose we wanted to predict the number of bird cases in a county with 300 farms, 700 square miles, a density of 200 that had recorded 4 equine cases.
+
+```{r}
+newdata = data.frame(Equine.cases=4, Farms=300, Area=700, Human.density=200)
+predict(fit3, newdata=newdata)
+```
+
+Note this is on a log scale (remember we are using a log link function in Poisson regression).  To get in the original units, we want to specify `type=response`:
+
+```{r}
+
+predict(fit3, newdata=newdata, type='response')
+```
+
+If we wished to build an interval around this prediction, we (unfortunately) have to do so manually by extracting the standard error for the predicted value. A quick way to build an interval around this is by using the old $\pm 2*SE$ rule (recall from Intro Stat, the *Empirical Rule*). However, due to the additive nature of building the prediction interval endpoints, it is more appropriate to find the entire interval (upper and lower limits) on the model's log scale, and then untransform them to get the result.  We do so below:
+
+```{r}
+pred <- predict(fit3, 
+                newdata=newdata, 
+                type='link',                 # 'link' =  log scale
+                se.fit=TRUE)                 # extract the SE of the prediction
+log.PI <- pred$fit + c(-1,1)*2*pred$se.fit   # Empirical Rule-style 95% interval
+PI <- exp(log.PI)                            # untransform the log scale
+PI                                           # display the result
+```
+
+We can be reasonably sure the number of bird cases in such a county will be between `r round(PI[1], 2)` to `r round(PI[2], 2)`.

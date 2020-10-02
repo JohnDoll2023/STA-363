@@ -1,0 +1,77 @@
+---
+title: "Class 15: Assignment"
+author: "John Doll"
+date: "Mar 16 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(lindia)
+library(ggfortify)
+```
+
+
+
+## A more complex example
+
+Let's now consider a more complex model that also incorporates some *data science* type elements. Each of the 50 United States has been classified into one of 4 census regions:
+
+![United States Census Regions.](https://www.cdc.gov/surveillance/nrevss/images/us_map4.png)
+
+The file `censusRegions.csv` contains a mapping of State abbreviation and its corresponding census region. Consider the following:
+
+```{r}
+states <- read.csv("stateCrimeData.csv")
+crimedata <- states %>%
+  filter(state != "District of Columbia") 
+
+census <- read.csv("censusRegions.csv")
+head(census)
+names(crimedata)
+census <- census %>%
+  rename(stabbr = State)
+crimedata <- left_join(crimedata, census, by="stabbr")
+unique(crimedata$Region)
+```
+
+* First, we read in the `stateCrimeData.csv` file from the earlier in-class discussion, and remove the District of Columbia from the data set.  The resulting file we call `crimedata`.
+* Then, we read in the `censusRegions.csv` file and note it contains two variables `Region` and `State` (which is really an abbreviation).
+* We then look at the variable names in the crime data and note that the state abbreviation variable is called `stabbr`. Ultimately we want to *join* these two datasets together, so we...
+* Rename the `State` variable in `census` to `stabbr`. Now our two datasets contain a **common variable** on which to join cases.
+* We then *join* the two datasets. Here we use the `left_join` operation so only observations in the `crimedata` are retained (that is, Washington, DC will be dropped since it is not in the crime data).
+* Lastly, we look at the `unique` values of the `Region` variable to demonstrate that our joining appears to be successful.
+
+Now let's model Burglary rates as a function of census region:
+
+```{r}
+crimefit4 <- lm(Burglary ~ Region, data=crimedata)
+summary(crimefit4)
+```
+
+*ANSWER THE FOLLOWING* with justification based on the output:
+
+**Question 1**. Does this model predict burglary rates?
+
+*Overall, this model does significantly predict burglary rates ($F$-stat of 11.79 on 3 and 46 degrees of freedom, $p$-value=7.466$10^{-6}$).*
+
+**Question 2**. How much of the variability in burglary rates is explained by census region?
+
+*About 39.78% of the variability in burglary rates is explained by census region.*
+
+**Question 3**. Interpret the `(Intercept)` term in this model.
+
+*The true mean burglary rate for the Midwest Region is 595.68 per 100,000 residents.*
+
+**Question 4**. Interpret the `RegionNortheast` term in this model.
+
+*Being in the Northeast Region is associated with a 130.88 decrease in burglury rates.*
+
+**Question 5**. What do each of the 3 $t$-tests imply?
+
+*Being in the Northeast Region is not a significant predictor for burglary rates ($p$-value of .136).* <br>
+*Being in the South Region is a significant predictor for burglary rates ($p$-value of .000124).* <br>
+*Being in the West Region is not a significant predictor for burglary rates ($p$-value of .526).*

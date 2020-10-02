@@ -1,0 +1,127 @@
+---
+title: "Homework 5"
+author: "John Doll"
+date: "4/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(ggfortify)
+library(gridExtra)
+library(lindia)
+library(car)
+```
+
+# Question 1
+
+```{r, warning=FALSE}
+air <- read.csv("beijingAirQuality2013.csv")
+ggscatmat(air)
+```
+
+Any correlation here between the predictor variables and the response variable of `pm2.5` is minimal. The wind speed (`Iws`) looks like it has a small negative correlation with `pm2.5`  and temperature (`TEMP`) also seems to have a small negative correlation with `pm2.5` but the other two predictor variables (`DEWP` and `PRES`) seem to have a correlation near zero with `pm2.5` based on this scatter plot matrix. Several pf the predictor variables appear to be correlated. `DEWP` (Dew Point) and `TEMP` appear to have a strong positive linear correlation with each other. `PRES` looks to have a strong negative linear correlation with both `DEWP` and `TEMP`.
+
+# Question 2
+
+```{r}
+air.lm <- lm(pm2.5 ~ DEWP + TEMP + PRES + Iws, data = air)
+summary(air.lm)
+autoplot(air.lm)
+#Check Leverage Threshold
+2*4/365
+```
+
+Yes, there appear to be some assumption violations. The Residuals vs Fitted plot seems to take a curved shape which is of concern and the values don't look like they are randomly distributed. It is as if there is an asymptote that they cannot go under, as the values make a wall at this line and only appear above it. The Normal Q-Q plot seems to lose its normality as it trends upwards. The Residuals vs Leverage Plot has at least a few outliers and one high leverage point. The Scale-Location plot looks alright as it takes a dive in the middle but rebounds by the end. 
+
+# Question 3
+
+```{r} 
+gg_boxcox(air.lm)
+```
+
+The Box-Cox plot very strongly suggests a logarithmic transformation on the data set so that is what I will perform.
+
+```{r}
+air.loglm <- lm(log(pm2.5) ~ DEWP + TEMP + PRES + Iws, data = air)
+summary(air.loglm)
+autoplot(air.loglm)
+```
+
+It does make sense to do this transformation because it fixes most of our assumptions issues. The Residuals vs Fitted plot has a more linear slope now and the data appears to be randomly spread along the graph. The Normal Q-Q plot looks normal now and passes the pencil test. The Scale-Location plot no longer takes a dive in the middle and the data looks more randomly distributed now than it did before. The Residuals vs Leverage plot no longer has any outliers, although it still has one high leverage point. What is interesting is that across all plots, the point 332 is highlighted as unusual, so that will be something to look out for. 
+
+# Question 4
+
+```{r}
+air.mloglm <- lm(log(pm2.5) ~ DEWP + TEMP + PRES + Iws + month, data = air)
+summary(air.mloglm)
+```
+
+Yes, the residual standard error is reduced by about 0.1 and the $R^2_a$ is increased by about 0.14 in my new model. The model is still a significant predictor of with an $F$-stat of 41.97 on 15 and 349 degrees of freedom, $p$-value is near zero.
+
+# Question 5
+
+```{r}
+air <- air %>%
+  mutate(month = factor(month, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")))
+air.ancova <- lm(log(pm2.5) ~ DEWP + TEMP + PRES + Iws + month:DEWP + month:TEMP + month:PRES + month:Iws, data = air)
+summary(air.ancova)
+confint(air.ancova, "Iws")
+```
+
+We can be 95% confident that the cumulated wind speed will change the true mean log of PM2.5 concentration by between -0.00904 and 0.0000405 ug/$m^3$.
+
+# Question 6
+
+```{r}
+autoplot(air.ancova)
+```
+
+As I previously mentioned in Question 3, point 332 is not normal so now we are going to remove it.
+
+```{r}
+air.ancova332 <- lm(log(pm2.5) ~ DEWP + TEMP + PRES + Iws + month:DEWP + month:TEMP + month:PRES + month:Iws, data = air[-332,])
+summary(air.ancova332)
+```
+
+Nothing too dramatic happened. One variables changed from being insignificant to being significant. The $R^2_a$ rose by about 0.005 and the residual standard error decreased by about 0.005. 
+
+# Question 7
+
+```{r}
+air <- air %>%
+  mutate(Season = as.factor(case_when(month == "Jan" ~ "Winter",
+                                      month == "Feb" ~ "Winter",
+                                      month == "Dec" ~ "Winter",
+                                      month == "Mar" ~ "Spring",
+                                      month == "Apr" ~ "Spring",
+                                      month == "May" ~ "Spring",
+                                      month == "Jun" ~ "Summer",
+                                      month == "Jul" ~ "Summer",
+                                      month == "Aug" ~ "Summer",
+                                      month == "Sep" ~ "Fall",
+                                      month == "Oct" ~ "Fall",
+                                      month == "Nov" ~ "Fall",
+                                      TRUE ~ "False")))
+air.ancovaseason <- lm(log(pm2.5) ~ DEWP + TEMP + PRES + Iws + Season:DEWP + Season:TEMP + Season:PRES + Season:Iws, data = air)
+summary(air.ancovaseason)
+```
+
+I think I would prefer the other model than this one. The previous model has a lower residual standard error and a higher $R^2_a$ than this model. To this model's credit, it is still significant with an $F$-stat of 32.8 on 16 and 348 degrees of freedom and a $p$-value near zero.
+
+# Question 8
+
+```{r}
+exp(predict(air.ancova, newdata = data.frame(month = "Jun", DEWP = 15, TEMP = 22, PRES = 1004, Iws = 14), int = "conf"))
+```
+
+We can be 95% confident that the true mean PM2.5 on a June day with a dew point of 15 degrees Celsius, a temperature of 22 degrees Celsius, air pressure of 1004 hectopascals, and cumulative wind speed of 14 meters per second is between 73.87908 and 114.5861 micrograms per cubic meter of air.
+
+# Question 9
+
+I would expected this data to be autocorrelated because the data points are taken only 24 hours apart in the same exact area. So naturally we would expect the data to be correlated because more likely than not, the weather will not make a drastic change on a day by day basis. Autocorrelation would suggest that there may be issues in residuals, and further, our $p$-values. If there are errors in our $p$-values, then we have a problem determining the significance of our variables and models.
+
+

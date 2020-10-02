@@ -1,0 +1,53 @@
+---
+title: "Class 25: Assignment"
+author: "Hughes/Fisher"
+date: "Apr 27 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+**Revisit the Frahmingham Heart Study data set.**  The objective of the Framingham Heart Study was to identify the common factors or characteristics that contribute to CVD by following its development over a long period of time in a large group of participants who had not yet developed overt symptoms of CVD or suffered a heart attack or stroke. 
+The datafile `framingham.txt` contains selected variables for 4,658 participants in the study.  The variables are:
+
+* `age` - subject age in years
+* `sbp` - systolic blood pressure
+* `dbp` - diastolic blood pressure
+* `scl` - serum cholesterol level
+* `bmi` - BMI (Body Mass Index)
+* `chdfate` - Indicator of whether the subject has been diagnosed (1) or not (0) with coronary heart disease
+
+```{r}
+framingham <- read.table("framingham.txt", header=TRUE)
+head(framingham)
+```
+
+
+----
+
+**QUESTION 1.**  Fit a logistic regression model that uses `age` and `bmi` as predictors of whether a person has been diagnosed with coronary heart disease.  Provide model output that displays the estimated $\beta$-coefficients expressed in terms of odds.
+
+```{r}
+heart.fit <- glm(chdfate ~ age + bmi, data=framingham, family=binomial(link=logit))
+summary(heart.fit)
+```
+
+
+----
+
+**QUESTION 2.** Interpret the coefficient estimate for `age` in problem context.  You must express your answer in terms of odds of CHD diagnosis.
+
+*$\hat{\beta_1}$ = 0.031987* <br>
+This is positive so the older someone is, the more liekly they are to have coronary heart disease. For every one year increase in age, we would expect the log odds to increase by 0.031987 units. The odds $\frac{p}{1-p}$ will grow at a multiplicative rate of `r exp(coef(heart.fit)[1])` for each one-unit increase in the size difference.
+
+
+----
+
+**QUESTION 3.** Interpret the coefficient estimate for `bmi` in problem context.  You must express your answer in terms of odds of CHD diagnosis.
+
+*$\hat{\beta_1}$ = 0.070625* <br>
+This is also positive so the larger a person's BMI, the more likely they are to have coronary heart disease. For every one unit increase in BMI, we would expect the log odss to increase by 0.070625 units. The odds $\frac{p}{1-p}$ will grow at a multiplicative rate of `r exp(coef(heart.fit)[2])` for each one-unit increase in the size difference.

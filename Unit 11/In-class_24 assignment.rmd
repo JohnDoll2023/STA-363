@@ -1,0 +1,120 @@
+---
+title: "Class 24: Assignment"
+author: "John Doll"
+date: "Apr 22 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+**Revisit the Frahmingham Heart Study data set.**  The objective of the Framingham Heart Study was to identify the common factors or characteristics that contribute to CVD by following its development over a long period of time in a large group of participants who had not yet developed overt symptoms of CVD or suffered a heart attack or stroke. 
+The datafile `framingham.txt` contains selected variables for 4,658 participants in the study.  The variables are:
+
+* `age` - subject age in years
+* `sbp` - systolic blood pressure
+* `dbp` - diastolic blood pressure
+* `scl` - serum cholesterol level
+* `bmi` - BMI (Body Mass Index)
+* `chdfate` - Indicator of whether the subject has been dignosed (1) or not (0) with coronary heart disease
+
+```{r}
+framingham <- read.table("framingham.txt", header=TRUE)
+framingham <- framingham %>%
+  mutate(BMI.Category = case_when(bmi < 18.5 ~ "Underweight",
+                                  bmi <= 24.9 ~ "Normal weight",
+                                  bmi <= 29.9 ~ "Overweight",
+                                  bmi >= 30 ~ "Obese"))
+head(framingham)
+```
+
+
+----
+
+**QUESTION 1.** Consider the following code:
+
+```{r}
+heart.agg <- framingham %>%
+  mutate(bmi = floor(bmi) ) %>%
+  group_by(bmi) %>%
+  filter(n() > 15) %>%
+  summarize(prop = mean(chdfate))
+```
+
+Briefly explain what the code does. That is, exactly what are the `mutate`, `group_by`, `filter` and `summarize` functions doing with the `framingham` dataset?
+
+*The floor function in the mutate rounds down the BMI values to integers. The the group_by groups the data into the same BMI categories. The final filter makes it so that we are looking at groups that have 16 or more data points in them and keeping those.*
+
+
+----
+
+**QUESTION 2.**  Make a scatterplot of the proportion of those with heart disease as a function of the bmi values from the `heart.agg` dataset.
+
+```{r}
+ggplot(heart.agg) + 
+  geom_point(aes(x=bmi, y=prop))
+```
+
+
+----
+
+**QUESTION 3.**  Create a new variable, called `odds`, in the dataset `heart.agg` that is the odds a patient has heart disease. Recall, $Odds = \frac{\#~success}{\#~failture} = \frac{p}{1-p}$. Make a scatterplot of the odds of heart disease as a function of bmi.
+
+```{r}
+heart.agg <- heart.agg %>%
+  mutate(odds = prop/(1-prop) )
+
+ggplot(heart.agg) + 
+  geom_point(aes(x=bmi, y=odds))
+```
+
+
+----
+
+**QUESTION 4.**  Create a new variable, called `log.odds`, in the dataset `heart.agg` that is the log odds a patient has heart disease. Make a scatterplot of the log odds of heart disease as a function of bmi.
+
+```{r}
+heart.agg <- heart.agg %>%
+  mutate(log.odds = log(odds) )
+
+ggplot(heart.agg) + 
+  geom_point(aes(x=bmi, y=log.odds))
+```
+
+
+----
+
+**QUESTION 5.**  Compare/contrast the *range* (or valid values for the $y$-axis) for the three plots above. Describe/discuss why linear regression is not valid for two of the scatterplots.
+
+*The proportions plot has valid values from 0 to 1, while the odds plot can go from 0 to infinity. The log odds plot can go from negative infinity to positive infinity. Linear regression is not valid for either of the first two plots since they have a floor or ceiling to their values. *
+
+
+----
+
+**QUESTION 6.**  Fit a simple linear regression to model the log odds of heart disease as a function of the bmi in the `heart.agg` dataset. Make a plot with the original data and fitted regression line.
+
+```{r}
+fit <- lm(log.odds ~ bmi, data=heart.agg)
+summary(fit)
+
+ggplot(heart.agg, aes(x=bmi, y=log.odds)) + 
+  geom_point() + 
+  geom_smooth(method="lm")
+```
+
+
+----
+
+**QUESTION 7.**
+
+Use your fitted regression line from question 6 to predict the probability a randomly selected patient with a bmi of 27.5 will have heart disease
+
+```{r}
+predicted.log.odds <- predict(fit, newdata=data.frame(bmi=27.5))
+exp(predicted.log.odds)/(1+exp(predicted.log.odds))
+```
+
+*Someone with a 27.5 BMI has a 0.33 probability of having heart disease.*

@@ -1,0 +1,223 @@
+---
+title: "Class 07: More Advanced Designs"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(emmeans)
+```
+
+
+**Goals for this week:**
+
+* Build an appreciation for the difficulties that arise with more advanced designs
+* Recognize and analyze data from a repeated measures experiment
+* Be able to better recognize the distinguishing characteristics of **within-subjects factors** vs. **between-subjects factors**
+
+## Review and extension
+
+We have seen the following experimental design types so far:
+
+* One-Way ANOVA
+* One-Way ANOVA with Blocking
+* Two-Way ANOVA (with factors potentially interacting)
+
+More elaborate designs can incorporate different aspects of simpler designs.  For example, we could have a Two-Way ANOVA with a Blocking factor. How to code this for analysis in R?
+
+```{r, eval=FALSE}
+aov(Response ~ Block + Factor1*Factor2, data=my.data)
+```
+
+## Higher order "factorial" designs
+
+We can keep piling on the fun with more factors, but the models get more complicated as a result. Consider the following example:
+
+**Coal ash**. An experiment was conducted to investigate the effect of three factors on the percentage of ash in coal:
+
+* Type of coal: *Mojiri, Michel, Kairan,* and *Metallurgical Coke*
+* Maximum particle size: *246, 147, 74,* and *48 microns*
+* Weight of selected specimen: *1 gram, 100 milligrams, 20 milligrams,* and *5 milligrams*
+
+Based on this brief description, first note the underlying (full) statistical model:
+
+$$Y_{ijkl} = \mu + \alpha_i + \beta_j + \gamma_k + (\alpha\beta)_{ij} + (\alpha\gamma)_{ik} + (\beta\gamma)_{jk} + (\alpha\beta\gamma)_{ijk} + \varepsilon_{ijkl}$$
+
+* $Y_{ijkl}$ is the $l^\mathrm{th}$ observation in the $i^\mathrm{th}$ level of the first factor, the $j^\mathrm{th}$ level of the second factor and the $k^\mathrm{th}$ level of the third factor.
+* $\mu$ is an overall mean
+* Type of coal main effect $\alpha_i$ -- 4 levels
+* Particle size main effect $\beta_j$ -- 4 levels
+* Weight main effect $\gamma_k$ -- 4 levels
+* Type and particle size interaction effect $(\alpha\beta)_{ij}$
+* Type and Weight interaction effect $(\alpha\gamma)_{ik}$
+* Particle size and Weight interaction effect $(\beta\gamma)_{jk}$
+* Type of coal, Particle size and Weight interaction effect $(\alpha\beta\gamma)_{ijk}$
+* $\varepsilon_{ijkl}$ is the random error term
+
+Answer the following:
+
+* **What are the experimental units?**    *pieces of coal* 
+* **What are thre treatments in this design?**    *Each type/particle size/weight combination*
+* **How many unique treatments are in this design?**    *4x4x4=64* 
+* **Discuss the difficulties associated with replication in this design.**    *Conducting the experiment can be costly, very time consuming, and challenging because you have to find specific experimental units that fit each treatment i.e. the weights could slightly vary from what the 4 levels are. * 
+* **What challenges does having three factors introduce to the analysis of such a designed experiment?**    *We lose a degree of freedom for each new term added to the equation. We have 64 analyses to conduct so the different interactions could be hard to explain* 
+
+**A note about coding:** To fit the model above using R, you would use code similar to:
+
+```{r, eval=FALSE}
+aov(Response ~ Factor1*Factor2*Factor3, data=my.data)
+```
+
+----------
+
+## Repeated Measures
+
+Sometimes for reasons of economy or necessity, an experiment is conducted where we actually measure the *same* experimental unit repeatedly over time, or design the experiment so that we apply **every** treatment to each individual experimental unit over the course of the experiment.  This practice fundamentally changes how variability among responses behaves, and thus changes the way in which we must perform an ANOVA.
+
+**Example.**  An experiment was conducted at the University of Texas at Austin to determine how diet and exercise affect the pulse rate of human subjects. Eighteen subjects were randomly assigned to one of three **exercise routines** (1 = aerobic stair climbing, 2 = racquetball, 3 = weight training) and one of two **diets** (1 = include meat, 2 = vegetarian). After a training period where all subjects followed their assigned exercise regimens and diet routines, their pulse rates were measured at three consecutive times (once after a warm-up, again after jogging and finally after running). 
+
+Let's read in the data first: a bit later, we'll do some of the standard data processing before starting an analysis:
+
+```{r}
+pulse <- read.csv("pulseRepMeasures.csv")
+kable(head(pulse))
+```
+
+While the above looks fine, sorting the data by `Subject` emphasizes the fact that `Time` is a factor whose levels can change within an experimental unit (i.e. person):
+
+```{r}
+pulse <- pulse %>%
+  arrange(Subject)
+kable(head(pulse))
+```
+
+There are three measured pulse rates for each subject over time.  Since any effects of `Diet` and/or `Exercise` are only observed over time, this makes `Time` a factor whose levels vary **within a subject** ... i.e. `Time` is a **within-subjects factor**, or also known as a **repeated-measures** factor.
+
+**Why is this important to distinguish from a between-subjects factor?**  *When a factor only varies within a subject, there is typically less random noise or variation in the measurements across this factor because of the consistency introduced by measuring the same EU repeatedly (you may be an EU, you are fairly consistent and homogenous compared to yourself). Ignoring this fact may erroneously make the analysis believe that random variation in the process is smaller than it truly is, leading to erroneously optimistic findings when comparing treatments.*  
+
+
+### EDA
+
+Now, some of the usual data prep before analysis:
+
+```{r}
+pulse <- pulse %>%
+  mutate(Subject = as.factor(Subject),
+         Exercise = as.factor(Exercise),
+         Diet = as.factor(Diet),
+         Time = factor(Time, levels=c("WarmUp", "AfterJogging", "AfterRunning")))
+```
+
+Becuase of the longitudinal nature of the response (being measured repeatedly on the same EUs over time), a good data visualization should reflect this aspect of the data.  **Response profiles** over `Time` are a good way to do this:
+
+```{r}
+ggplot(pulse) + 
+  geom_line(aes(x=Time, y=Pulse, color=Exercise, linetype=Diet, group=Subject))
+```
+
+We use different color and line styles to visually compare the different diets and exercise regimens.  But, the above display is a bit "busy", so **faceting the display** by `Diet` can help improve ledgibility:
+
+```{r}
+ggplot(pulse) + 
+    geom_line(aes(x=Time, y=Pulse, color=Exercise, group=Subject)) + 
+  facet_wrap(~Diet)
+```
+
+**What appears to going on, based on the plots?**  *The experimental units in diet one appear to have a higher pulse rate than the experimental units in diet two.*
+
+**QUICK EXERCISE.** Insert a code chunk below that creates profile plots that are faceted by type of exercise instead of diet.  Does the same story appear to told in this different data visualization of the same data?
+
+```{r}
+ggplot(pulse) + 
+    geom_line(aes(x=Time, y=Pulse, color=Diet, group=Subject)) + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~Exercise)
+```
+
+
+### Analysis
+
+Now let's proceed to an ANOVA analysis of this repeated measures experiment.  Before starting, we must articulate the **study goals** so we know how to address them via fitting a model to the data. 
+
+First, recognize that the effect of the different diets and exercise regimens **would only be revealed over time.**  This means that we should compare how different treatments (i.e. different diet/exercise combinations) would affect mean pulse rates differently *over time*. Stated another way, we ask: **Does the effect of different treatments on mean pulse rate change depending on the time of measurement?**  That is what an **interaction test** between `Time` and the treatments (`Diet` and `Exercise` combinations) would address!
+
+To fit the model to accomodate this, the appropriate R code is as follows:
+
+```{r, eval=FALSE}
+pulse.anova <- aov(Pulse ~ Diet*Exercise*Time + Error(Subject/Time), data=pulse)
+```
+
+The command above fits a repeated measures ANOVA as follows:
+
+* `Pulse` is the response variable
+* The factors `Diet`, `Exercise`, and `Time` are all observed in combination, so there are three factors in the study.  We will observe all the potential interactions (**even the three-way interaction -- that's the first one we will test**).
+* The `Error(Subject/Time)` piece tells R that `Time` is a **within-subjects (repeated) factor**, and thus will handle the random error components appropriately for the analysis.
+
+So here goes:
+
+```{r}
+pulse.anova <- aov(Pulse ~ Diet*Exercise*Time + Error(Subject/Time), data=pulse)
+summary(pulse.anova)
+```
+
+#### Interpretation
+
+The first thing to look at is the **highest order interaction** (labeled `Diet:Exercise:Time`). This test essentially addresses if the Diet/Exercise combinations affect pulse rate differently as time goes by (i.e. as the activity becomes more strenuous).  We see that this effect is not significant ($F$-stat = 1.850 on 4 and 24 degrees of freedom, $p$-value = 0.1523).  Because of this insignificance, we can safely look at the lower-order interactive effects to see where (or *if*) there is evidence of differences in pulse rates:
+
+* `Exercise:Time`: The effect of different exercise regimens (regardless of diet!) does **not** significantly affect pulse rates  as time goes along (i.e. as the activity becomes more strenuous) ($F$-stat = 0.302 on 4 and 24 degrees of freedom, $p$-value = 0.8740).
+* `Diet:Time`: The effect of different diets (regardless of exercise regimen!) does **not** significantly affect pulse rates as time goes along (i.e. as the activity becomes more strenuous) ($F$-stat = 2.583 on 2 and 24 degrees of freedom, $p$-value = 0.0964).
+* `Diet:Exercise`: The effect of different diet/exercise combinations (averaged across `Time`: i.e. regardless of activity) does **not** significantly affect pulse rates ($F$-stat = 0.351 on 2 and 12 degrees of freedom, $p$-value = 0.7113).
+
+This basicallly addresses the research goals.  However, we can make some broader generalizations about these factors under study.   Since none of the two-factor interactions are significant, we can break up the effects of the individual factors and look at them each in isolation.  Remember from last week that these are called **main effects**, and are only meaningful to look at if they are not involved in any interactions with other factors:
+
+* `Diet`: The effect of different diets (regardless of time or exercise regimen!) **significantly affects** pulse rates ($F$-stat = 8.577 on 1 and 12 degrees of freedom, $p$-value = 0.0126).
+* `Exercise`: The effect of different exercise regimens (regardless of time or diet!) does **not** significantly affect pulse rates ($F$-stat = 0.761 on 2 and 12 degrees of freedom, $p$-value = 0.4884).
+* `Time`: The effect of different times (i.e. the different levels of strenuous activity), regardless of diet or exercise regimen, **significantly affects** pulse rates ($F$-stat = 703.716 on 2 and 24 degrees of freedom, $p$-value < 0.0001) **...well, duh, of course!!!**
+
+#### Synopsis of findings
+
+So, the only meaningful effect we have discovered here is due to `Diet`.  The different diets significantly affect the true mean pulse rate, regardless of exercise regiment of type of physical activity.
+
+You might ask why we don't perform any multiple comparisons here for the `Diet` effect on pulse rates.  **Well, why is it unnecessary?**  Because there are only two diets -- there are no **multiple** comparisons, only one!
+
+#### Assumption checking
+
+Due to the lack of independence in our responses (the within factor structure), checking the underlying assumptions (Normality, constant error variance, independence between factors) is a complex task and is outside the scope of this course. Contact a statistician if needed.
+
+
+-------
+
+A visual display of the `Diet` effect (aggregated over the exercise regimens, since those don't make a significant difference) can display the result graphically:
+
+```{r}
+# Create a summary dataset of means/SEs of pulse rates by Diet and Time
+pulse.summary <- pulse %>%
+  group_by(Diet, Time) %>%
+  summarise(Mean = mean(Pulse),
+            SE = sd(Pulse)/sqrt(length(Pulse)))
+
+# We include a position_dodge() so the error bars does not overlap
+ggplot(pulse.summary, aes(x=Time, y=Mean, colour=Diet)) + 
+  geom_errorbar(aes(ymin=Mean-SE, ymax=Mean+SE), width=.1, position=position_dodge(0.3)) +
+  geom_line(aes(group=Diet), position=position_dodge(0.3)) +
+  geom_point(position=position_dodge(0.3)) +
+  xlab("Time (Activity)") +
+  ylab("Pulse Rate") +
+  ggtitle("Mean Pulse Rates (with Standard Error bars)")
+```
+
+**Note about the plot:** We are making a plot based on a different dataset we created! This new dataset consist of the Diet type, Time and mean and standard deviation of pulse rates. Below is the summary data we just plotted (this is only included for explanation).
+
+```{r}
+kable(pulse.summary)
+```
+
+
+#### Finally ...
+
+**Write a single sentence in context** (based on the ANOVA results and the plot) that describes the results of the analysis.
+
+*Diet two results in a lower pulse rate than diet one even with the added variable of exercise.*

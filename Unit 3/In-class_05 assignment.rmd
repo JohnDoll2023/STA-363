@@ -1,0 +1,94 @@
+---
+title: "Class 05: Assignment"
+author: "John Doll"
+date: "Feb 10 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(ggfortify)
+library(emmeans)
+```
+
+
+# Potato Example
+
+The following data set is from a study about the quality of cooked potatoes using various cooking methods. There are several variables in this data set, but for today, we are going to focus on just two of them. We are going to investigate the effect of the cooking method on the flavor score. However, since the potatoes were taken from two different growing locations, we want to use the location ("GrowArea") as a blocking factor. The cooking methods are as follows:
+
+1 = Boil <br>
+2 = Steam <br>
+3 = Mash <br>
+4 = Bake at 350 degrees F <br>
+5 = Bake at 450 degrees F
+
+Notice we are using a slightly different method to read the data today (called `read.table`) since our data set is a text file, not a CSV file. 
+
+```{r}
+potato <- read.table("potato.txt")
+names(potato) <- c("GrowArea", "Temp", "Size", "StorageTime", "CookingMethod",
+                    "TextureScore", "FlavorScore", "MoistnessScore")
+glimpse(potato)
+```
+
+## Data Cleaning
+
+First, create a reduced data set that only contains the variables we need. You should also make sure factor variables are not being treated as numeric. (For cooking method, set the factor labels to something more meaningful than 1-5).
+
+```{r}
+potato <- potato %>%
+  mutate(GrowArea = as.factor(GrowArea),
+         CookingMethod = factor(CookingMethod, 1:5, labels = c("Boil", "Steam", "Mash", "Bake @350", "Bake @450"))) %>%
+  select(GrowArea, FlavorScore, CookingMethod)
+
+```
+
+
+## EDA
+
+Create a profile plot that shows the average flavor score for each cooking method when adjusting for location. You should end up with a plot with 2 lines. Use the `potato_means` data set below to create this plot!
+
+```{r}
+potato_means <- potato %>%
+  group_by(CookingMethod, GrowArea) %>%
+  summarize(FlavorScore = mean(FlavorScore))
+glimpse(potato_means)
+
+ggplot(potato_means) +
+  geom_line(aes(x = CookingMethod, y = FlavorScore, col = GrowArea, group = (GrowArea))) +
+  geom_point(aes(x = CookingMethod, y = FlavorScore, col = GrowArea), size = 3)
+```
+
+**The flavor score seems to be consistently higher for Grow Area 2 than Grow Area 1 except under the cooking method of baking at 450 degrees.**
+
+## ANOVA model fit
+
+Run the one-way block ANOVA to test the effect of cooking method on flavor score blocking for location. Be sure to check your assumptions and explain your results!
+
+```{r}
+potato.anova <- aov(FlavorScore ~ GrowArea + CookingMethod, data = potato)
+autoplot(potato.anova)
+summary(potato.anova)
+```
+
+**The assumptions seem to all be normal and check out, nothing of concern. We see that the Cooking Method does have an influence on the Flavor Score(**$F$**-stat = 4.768 on 4 and 154 degrees of freedom, resulting in a **$p$**-value of 0.00118) Since there is a difference, we will do a multiple comparisons test to find out where the differences are. We will use Tukey's method because there is no base model or control group.**
+
+
+## Multiple Comparisons
+
+Run the tests for multiple comparisons (only if necessary).
+
+```{r}
+potato.mc <- emmeans(potato.anova, "CookingMethod")
+contrast(potato.mc, "pairwise")
+plot(confint(contrast(potato.mc, "pairwise")))
+```
+
+**Based on this output, we can conclude there is a significant difference in the flavor score between potates: **
+
+* baked at 350 degrees vs potatoes baked at 450 degrees (backed up by $p$-value of 0.0057).
+* steamed vs baked at 350 (backed up by $p$-value of 0.0057).
+
+**The rest of the comparisons are not significantly different between their flavor scores.**

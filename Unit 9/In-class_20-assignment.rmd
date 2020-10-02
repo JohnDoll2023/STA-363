@@ -1,0 +1,164 @@
+---
+title: "Class 20: Assignment"
+author: "John Doll"
+date: "Apr 8, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(leaps)
+library(ggfortify)
+library(gridExtra)
+library(lindia)
+library(car)
+```
+
+
+### Model Building Activity: Used Car Prices
+
+This activity is designed to have you bring together all of the aspects of building and fitting a multiple regression model to a set of data. For this data set, a representative sample of over eight hundred 2005 General Motors (GM) cars were selected, then retail price was calculated from the tables provided in the 2005 Central Edition of the Kelly Blue Book. 
+
+The data file `kuiperCars.csv` contains the following variables:
+
+* `Price` - suggested retail price of the used 2005 GM car in excellent condition. *(The condition of a car can greatly affect price. All cars in this data set were less than one year old when priced and considered to be in excellent condition.)*
+* `Mileage` - number of miles the car has been driven
+* `Make` - manufacturer of the car such as Saturn, Pontiac, and Chevrolet
+* `Model` - specific models for each car manufacturer such as Ion, Vibe, Cavalier
+* `Trim` - specific type of car model such as SE Sedan 4D, Quad Coupe 2D
+* `Type` - body type such as sedan, coupe, etc.
+* `Cylinder` - number of cylinders in the engine
+* `Liter` - a more specific measure of engine size
+* `Doors` - number of doors
+* `Cruise` - 0/1 indicator variable representing whether the car has cruise control (1 = cruise)
+* `Sound` - 0/1 indicator variable representing whether the car has upgraded speakers (1 = upgraded)
+* `Leather` - 0/1 indicator variable representing whether the car has leather seats (1 = leather)
+
+**In the activity, you must take care to consider and address all issues and concerns in the development of your model:**
+
+* Correctly determine which variable is the response variable and what are the candidate predictor variables.
+* Determine variables that should be discarded as candidate predictors from the very beginning.  (As a hint, look at the `Trim` variable: does it contain mostly the same information as other variables in the predictor pool?  If so, you don't want the redundancy in your model. There are other examples where different variables contain overlapping or redundant information ... investigate and remove unneeded variables at the start.)
+* Correctly assign the appropriate variable type for each candidate predictor (e.g. which predictor are *truly* categorical here?).  Use `mutate` to create factors if necessary.
+* Perform an effective EDA.
+* When fitting models, check and address assumption violations as well as identifying any unusual observations, and deal with them appropriately.
+* Perform variable selection (i.e. model selection) to simplify your model.
+* Once you are satisfied that you have arrived at a final model, **use it to address the two goals stated below**.
+
+The following code reads in the data:
+
+```{r}
+cars <- read.csv("kuiperCars.csv")
+head(cars)
+```
+
+**Goals for this activity:** develop a good fitting model that can be used to effectively predict the selling price of a 2005 used GM car.  More specifically, you need to develop a good model so that you can **answer the following two questions**:
+
+1. Determine what variables are important predictors of the selling price of a car.
+2. Last semester, one of the instructors of this course had a car accident and needed to buy a replacement car. He was looking at a used 2005 Chevrolet Malibu 4-door sedan with 20000 miles, a 6-cylinder 3.5-liter engine, loaded with cruise control, upgraded speakers and leather seats.  Use your final model to generate a 95% prediction interval for the price he would have to pay for that car.
+
+Be sure to include your code blocks and write interpretations of the results from the models you generate.
+
+----
+
+First, I am going to look at the data set and mutate them to the correct type. I have decided to make price my response variable. And also get rid of `Trim` because it can be explained by the model variable. I will also get rid of `Make` because it can be better explained by `Model`. Furthermore, I will be getting rid of the `Doors` variable because it can be explained by the `Model` variable. I will also get rid of `Cylinder` and `Liter` because both will be explained by `Model`. Finally, I will remove `Type` because it can be explained by `Model` as well.
+
+```{r}
+glimpse(cars)
+```
+
+Now I am going to make a scatterplot matrix and understand my data set better.
+
+```{r, warning=FALSE}
+ggscatmat(cars)
+```
+
+Of the variables I am keeping in my model, `Cruise` and `Price` offer a moderately correlated relationship. The scatter plot also suggests that there may be some skewness in our data.
+
+```{r}
+cars.lm <- lm(Price ~ Mileage + Model + Cruise + Sound + Leather, data = cars)
+summary(cars.lm)
+autoplot(cars.lm)
+```
+
+The model significantly predicts the price of car with an $F$-stat of 686.3 on 35 and 768 degrees of freedom with a $p$-value near 0. It has a residual standard error of about 1780 and an $R^2_a$ of 0.9676. <br>
+
+The Residuals vs Fitted plot looks decent although there is a vertical line of data points away from the main pack that could be problematic. The Normal Q-Q plot tails off at each end, which are the same data points that are problematic in the Residuals vs Fitted plot. The Scale-Location trends upward with that same data that is giving us a vertical line in the Residuals vs Fitted plot. The Residuals vs Factor Levels seems to be mostly normal, but once again there is a vertical line of screwed up data points which was existent in the other three plots. Also there are multiple data points above the 3 standardized residuals away mark but this can be expected with a data set so large. <br>
+
+Now I am going to fit a box-cox to see if the data should be transformed to solve the issue.
+
+```{r}
+gg_boxcox(cars.lm)
+```
+
+Based on the box cox, I am very strongly suggested to perform a log in my linear model so here it is.
+
+```{r}
+cars.lmlog <- lm(log(Price) ~ Mileage + Model + Cruise + Sound + Leather, data = cars)
+summary(cars.lmlog)
+autoplot(cars.lmlog, 1:6)
+#Checking leverage threshold
+2*9/804
+```
+
+In our new model, the data looks relatively similar, nothing too significant has changed, except one thing. The residual standard error is now about 0.07, down from about 1780. The $R^2_a$ is slightly higher now and the model is still significant with an $F$-stat of 755.2 on 35 and 768 degrees of freedom with a $p$-value near zero. I will be using this new linear model. <br>
+
+On top of the new model being more accurate, it is also better in terms of assumptions. The Residuals vs Fitted plot looks much more randomized and has a straight flat line going right through the middle. The Normal Q-Q plot appears to be normal value with less data points flaking off at the ends. The Scale-Location plot takes a more linear approach now and the data appears to be more randomized. And the Residuals vs Factor Levels plot appears to be more normal, and now only a few data points are over three standardized residuals away. However, like last time, we have a couple of data points that are unsual in nearly every plot, albeit different data points this time. I included the Cook's D plots to get a better look at these points. There are three points with relatively high Cook's D values that are unsual in each of the other plots. I will test the data without these points and see how much of an impact these points really have.
+
+```{r}
+cars.lmlogremove <- lm(log(Price) ~ Mileage + Model + Cruise + Sound + Leather, data = cars[c(-382, -384, -388),])
+summary(cars.lmlogremove)
+autoplot(cars.lmlogremove)
+```
+
+Since there is no major differences in the residual standard error, $R^2_a$, or significance of the data, and that removing these data points only causes different data points to be unusual in my new residual plots, I will leave these three points in the data set and work with my previous model. <br>
+
+
+We also notice that the two single variables by themselves that are not significant are `Cruise` and `Sound` which have $p$-values of 0.57 and 0.23 respectively. We will run new models without these variables and compare it to what we have now.
+
+```{r}
+cars.nocruise <- lm(log(Price) ~ Mileage + Model + Sound + Leather, data = cars)
+cars.nosound <- lm(log(Price) ~ Mileage + Model + Cruise + Leather, data = cars)
+cars.nocruisesound <- lm(log(Price) ~ Mileage + Model + Leather, data = cars)
+summary(cars.nocruise)
+autoplot(cars.nocruise)
+summary(cars.nosound)
+autoplot(cars.nosound)
+summary(cars.nocruisesound)
+autoplot(cars.nocruisesound)
+```
+
+After looking at each of the three outputs, I choose to go without `Cruise` or `Sound` because leaving them out simplifies my model and does not damage my residual standard error or $R^2_a$. In fact, it actually makes our model more significant by raising the $F$-stat. Additionally, the model looks to be just fine in the residual plots so `cars.nocruisesound` will be our model moving forward. <br>
+
+Now I will run a Variance Inflation Factors test and see if I can pinpoint other extraneous variables.
+
+```{r}
+vif(cars.nocruisesound)
+```
+
+Based on the output, it looks like we do not need to get rid of any other variables. Now we will test the AIC and BIC of our new model.
+
+```{r}
+AIC(cars.nocruisesound)
+BIC(cars.nocruisesound)
+```
+
+Here, we see very small negative values for both AIC and BIC which suggests our model is good. I will now perform the backwards and forwards model to see if any more simplification is suggested.
+
+```{r}
+step.backward <- step(cars.lmlog, direction = "backward")
+null.fit <- lm(log(Price) ~ 1, data = cars)
+step.forward <-step(null.fit, scope = formula(cars.lmlog), direction = "forward")
+```
+
+Since both the forwards and backwards models come out to exactly my `cars.nocruisesound` model from before, this confirms this model for me and will be the model I use to predict the price.
+
+My important variables are `Mileage`, `Model`, and `Leather`. Here is my prediction:
+
+```{r}
+exp(predict(cars.nocruisesound, newdata = data.frame(Mileage = 20000, Model = "Malibu", Leather = 1), int = "prediction"))
+```
+
+We can be 95% confident that the true mean price of a used 2005 Chevrolet Malibu 4-door sedan with 20000 miles, a 6-cylinder 3.5-liter engine, loaded with cruise control, upgraded speakers and leather seats would is between \$14,795.59 and \$19,552.94.

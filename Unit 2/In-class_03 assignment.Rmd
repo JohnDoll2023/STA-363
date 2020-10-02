@@ -1,0 +1,43 @@
+---
+title: "Class 03: Assignment"
+author: "John Doll"
+date: "Feb 3 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 1
+
+An investigator is interested in the effects of sleep deprivation on memory function. He randomly assigns each of 60 participants to one of several study conditions. Fifteen subjects take a test of memory function after they have been awake for eight hours (No sleep deprivation). Fifteen subjects take the test after they have been awake for 18 hours (mild sleep deprivation). Fifteen subjects take the test after they have been awake four 24 hours (moderate sleep deprivation).  Fifteen subjects take the test after they have been awake for 48 hours (severe sleep deprivation). Higher scores on the test of memory function indicate higher levels of performance.
+
+Answer the following questions about the experimental design.
+
+* What are the **Experimental Units** in this study? 
+     - *60 participants*
+* What is the **response variable** in this study? 
+     - *score on test of memory function*
+* What is the **factor** in this study? 
+     - *amount of time awake*
+* How many **factor levels** are there? 
+     - *four*
+* What are the **treatments**?  
+     - *8 hours of being awake, 18 hours being awake, 24 hours being awake, 48 hours being awake* 
+* Cite **two ways** that the researcher took to control for nuisance variables and unexplained variability.
+     - *same test of memory function for all participants*
+     - ***randomly** assigns the 60 participants to the four groups*
+
+
+## Problem 2
+
+For each of the scenarios described below, cite whether the problem is from an **observational study** or a **designed experiment**, and why.
+
+* A group of scientists wanted to test a new drug that's made to help people suppress their alcohol addiction. The scientists gathers a random sample of 200 alcoholics and then divides them into two groups; one receiving the drug and the other a placebo. They then will collect data on if the drug is effective or not. 
+
+**Designed experiment because they take a random sample of people. The scientists then run the experiment by keeping all variables the same except for the variable they are testing, which they manipulate purposely, which is whether or not the alcoholic is receiving the drug or the placebo.**
+
+* A group of students wanted to know if there is a relationship between attending after school activities and GPA. They then use a survey to gather their data from students who do attend after school activities and who doesn't attend and ask for their current GPA.
+
+**Observational study because the group of students applies no treatment to the students being surveyed. No variables are being manipulated, they are just studying the relationship between participation in after school activities and GPA.**

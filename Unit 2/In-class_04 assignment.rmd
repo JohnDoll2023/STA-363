@@ -1,0 +1,90 @@
+---
+title: "Class 04: Assignment"
+author: "John Doll"
+date: "Feb 5 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Load packages needed; read in data
+
+```{r, loadPackages, message=FALSE}
+library(tidyverse)
+library(knitr)
+library(ggfortify)
+library(emmeans)
+
+BPdata <- read.csv("Blood1.csv")
+glimpse(BPdata)
+```
+
+
+
+#### Question 1
+
+```{r}
+BPdata <- BPdata %>%
+mutate(Smoke = factor(Smoke, 0:1, labels=c("Non-Smoker", "Smoker")),
+       Overwt = factor(Overwt, 0:2, labels=c("Normal Weight", "Overweight", "Obese")))
+glimpse(BPdata)
+```
+
+
+#### Question 2
+
+* It is an observational study because the researchers are not giving the subjects any treatment, they aren't changing their weight or smoking tendencies. They are observing their systolic blood pressure while taking these factors into consideration. 
+
+
+
+#### Question 3
+
+```{r}
+ggplot(BPdata, aes(x=Overwt, y = SystolicBP)) +
+  geom_boxplot() +
+  labs(x = "Weight", y = "Systolic Blood Pressure")
+```
+
+* With this box plot, we can see that the averages are actually very similar, but the mean appears to increase from normal weight to overweight, and from overweight to obese. The obese boxplot has the most variance in the systolic blood pressure because the box appears wider and the tails also seem to be longer. The normal weight plot has several outliers in its data on both the low and high end which shows variance at the low systolic blood pressure and high systolic blood pressure. 
+
+
+#### Question 4
+
+```{r}
+Overwt.anova <- aov(SystolicBP ~ Overwt, data = BPdata)
+summary(Overwt.anova)
+```
+
+* Here we see an $F$ = 19.02 statistic on 2 and 497 degrees of freedom, which is significantly different than the value of 1 due to the $p$-value = 1.1e-08. We have evidence to suggest that different weights influence the systolic blood pressure. 
+
+
+#### Question 5
+
+```{r}
+autoplot(Overwt.anova)
+```
+
+* There don't appear to be any problems in the model residuals since both residual lines appear to be very linear.
+
+
+#### Question 6
+
+```{r}
+Overwt.mc <- emmeans(Overwt.anova, "Overwt")
+contrast(Overwt.mc, "pairwise")
+confint(contrast(Overwt.mc, "pairwise"))
+```
+
+There is no real control group in this data set, so we use Tukey's method of multiple comparison instead of Dunnett's since his requires a control group. There is no baseline data, we are comparing the different levels of weight with each other to see if there is a signifcant difference between any of them. 
+
+From the data, we can conclude with 95% confidence that:
+
+* the Overweight group has a mean Systolic Blood Pressure that is between 0.393 and 15.7 mmHg higher than the Normal weight group.
+
+* the Obese group has a mean Systolic Blood Pressure that is between 10.432 and 23.3 mmHg higher than the Normal weight group.
+
+* the Obese group has a mean Systolic Blood Pressure that is between 1.274 and 16.4 mmHg higher than the Overweight group.
+
+None of the confidence intervals contain zero (and the $p$-value is less than 0.05 for each) so we can be certain that there is a significant difference between each weight group in terms of Systolic Blood Pressure. 

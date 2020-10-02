@@ -1,0 +1,214 @@
+---
+title: "Class 24: Odd Ratios"
+author: "Hughes/Fisher"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Odds Ratios: A way to compare factors on binary outcomes
+
+Let's revisit the cancer prevalence data from last time.  Before we calculated the odds of lung cancer in a 60-year old male who has smoked at least 10 years (call this a "long-term" smoker):
+
+```{r}
+cancerprev <- read.csv("cancerprev.csv")
+cancerprev <- cancerprev %>%
+  mutate(LongTerm.Smoker = yrssmoke >= 10)
+xtabs(~LongTerm.Smoker + cancer, data=cancerprev)
+```
+
+* The **overall odds** of having cancer are $\frac{13+38}{116+33} = \frac{51}{149} = 0.3422$.
+* The odds of a long-term smoker having cancer are $\frac{38}{33} = 1.1515$ while the odds of a non-long-term smoker (that is, less than 10 years) are $\frac{13}{116} = 0.11207$
+
+By looking at the numbers, it seems apparent that long-term smokers are more likely to have cancer. We can make a direct comparison via an **odds ratio**. That is, the ratio of the two odds
+
+$$\frac{1.1515}{0.11207} = 10.27483$$
+
+So the odds of having cancer for a long-term smoker is **more than 10 times that** of a non-long-term smoker (based on our definition of "long-term" smoking).
+
+**Important Note:** If the time of smoking had little to no influence on the odds of having cancer, **we would expect the odds ratio to take on a value close to 1**. Here 10.27 > 1. (In fact, *much* greater than 1).
+
+----------------------------------------------------------
+
+## Example: The Framingham Heart Study
+
+*Quoted from the Framingham Heart Study website at* **framinghamheartstudy.org**:
+
+Cardiovascular disease (CVD) is the leading cause of death and serious illness in the United States. In 1948, the Framingham Heart Study - under the direction of the National Heart Institute (now known as the National Heart, Lung, and Blood Institute or NHLBI) - embarked on an ambitious project in health research. At the time, little was known about the general causes of heart disease and stroke, but the death rates for CVD had been increasing steadily since the beginning of the century and had become an American epidemic. The Framingham Heart Study became a joint project of the National Heart, Lung and Blood Institute and Boston University.
+
+The objective of the Framingham Heart Study was to identify the common factors or characteristics that contribute to CVD by following its development over a long period of time in a large group of participants who had not yet developed overt symptoms of CVD or suffered a heart attack or stroke.  The researchers recruited 5,209 men and women between the ages of 30 and 62 from the town of Framingham, Massachusetts, and began the first round of extensive physical examinations and lifestyle interviews that they would later analyze for common patterns related to CVD development. Since 1948, the subjects have continued to return to the study every two years for a detailed medical history, physical examination, and laboratory tests, and in 1971, the Study enrolled a second generation - 5,124 of the original participants' adult children and their spouses - to participate in similar examinations.  The study continues with new cohorts to this day.
+
+The datafile `framingham.txt` contains selected variables for 4,658 participants in the study.  The variables are:
+
+* `age` - subject age in years
+* `sbp` - systolic blood pressure
+* `dbp` - diastolic blood pressure
+* `scl` - serum cholesterol level
+* `bmi` - BMI (Body Mass Index)
+* `chdfate` - Indicator of whether the subject has been dignosed (1) or not (0) with coronary heart disease
+
+```{r}
+framingham <- read.table("framingham.txt", header=TRUE)
+head(framingham)
+```
+
+----
+
+**Body Mass Index (BMI)** is typically broken up into 4 distinct categories. By looking at the odds ratios of these categories, let's determine if BMI appears to influence the prevelance of heart disease in the `framingham` dataset.
+
+First, let's create the standard BMI categories (visit https://www.cancer.org/cancer/cancer-causes/diet-physical-activity/body-weight-and-cancer-risk/adult-bmi.html):
+
+```{r}
+framingham <- framingham %>%
+  mutate(BMI.Category = case_when(bmi < 18.5 ~ "Underweight",
+                                  bmi <= 24.9 ~ "Normal weight",
+                                  bmi <= 29.9 ~ "Overweight",
+                                  bmi >= 30 ~ "Obese"))
+xtabs(~ BMI.Category + chdfate, data=framingham)
+```
+
+----
+
+**QUESTION 1.**  Find the odds of CHD for underweight, normal, overweight and obese, respectively. Describe what you see.
+
+```{r}
+8/63
+530/1609
+681/1171
+246/350
+```
+It sure looks like the larger the bmi, the more likely for heart disease. We can compare the odds
+
+----
+
+**QUESTION 2.**  Calculate the OR (odds ratio) of CHD between normal weight vs. underweight persons.  Comment on what you see.
+
+```{r}
+(530/1609)/(8/63)
+```
+So a normal weight person is about 2.59 times more likely to suffer from heart disease than a underweight.
+
+----
+
+**QUESTION 3.**  Calculate the OR (odds ratio) of CHD to compare the following weight groups (with comments):
+   + overweight vs. normal weight persons
+   + overweight vs. underweight persons
+   
+```{r}
+(681/1171)/(530/1609)
+(681/1171)/(8/63)
+```
+An overweight person is 1.76 times more likely to have heart disease than normal weight and 4.58 times more likely than underweight.
+
+----
+
+**QUESTION 4.**  Calculate the OR (odds ratio) of CHD to compare obese persons to each of the three lower weight classes.
+
+```{r}
+(246/350)/(681/1171)
+(246/350)/(530/1609)
+(246/350)/(8/63)
+```
+An obese person is 1.2 times more likely to suffer from heart disease than an overweight, 2.13 times more likely than normal weight and 5.5 times more likely than an underweight person.
+
+---------------------------------------------------------
+
+## Activity 2
+
+### Problem 1
+
+Consider the following code:
+
+```{r}
+heart.agg <- framingham %>%
+  mutate(bmi = floor(bmi) ) %>%
+  group_by(bmi) %>%
+  filter(n() > 15) %>%
+  summarize(prop = mean(chdfate))
+```
+
+Briefly explain what the code does. That is, exactly what are the `mutate`, `group_by`, `filter` and `summarize` functions doing with the `framingham` dataset?
+
+*ANSWER:* All bmi values are rounded down to the nearest integer (decimals removed), then we create groupings of cases by the rounded bmi value, as long as the grouping has at least 15 members.  We then caclulate the proportion in each such grouping that has been diagnosed with CHD.
+
+### Problem 2
+
+Make a scatterplot of the proportion of those with heart disease as a function of the bmi values from the `heart.agg` dataset.
+
+```{r}
+ggplot(heart.agg) + 
+  geom_point(aes(x=bmi, y=prop))
+```
+
+### Problem 3
+
+Create a new variable, called `odds`, in the dataset `heart.agg` that is the odds a patient has heart disease. Recall, $Odds = \frac{\#~success}{\#~failture} = \frac{p}{1-p}$. Make a scatterplot of the odds of heart disease as a function of bmi.
+
+```{r}
+heart.agg <- heart.agg %>%
+  mutate(odds = prop/(1-prop) )
+
+ggplot(heart.agg) + 
+  geom_point(aes(x=bmi, y=odds))
+```
+
+### Problem 4
+
+Create a new variable, called `log.odds`, in the dataset `heart.agg` that is the log odds a patient has heart disease. Make a scatterplot of the log odds of heart disease as a function of bmi.
+
+```{r}
+heart.agg <- heart.agg %>%
+  mutate(log.odds = log(odds) )
+
+ggplot(heart.agg) + 
+  geom_point(aes(x=bmi, y=log.odds))
+```
+
+### Problem 5
+
+Compare/contrast the *range* (or valid values for the $y$-axis) for the three plots above. Describe/discuss why linear regression is not valid for two of the scatterplots.
+
+*ANSWER:* The proportion scale response ranges from 0 to 1; the odds range from 0 to $\infty$; but log odds can be anything from -$\infty$ to $\infty$.  The presence of a hard floor or ceiling on the response in the first two plots make it unreasonable for linear regression modeling
+
+### Problem 6
+
+Fit a simple linear regression to model the log odds of heart disease as a function of the bmi in the `heart.agg` dataset. Make a plot with the original data and fitted regression line.
+
+```{r}
+fit <- lm(log.odds ~ bmi, data=heart.agg)
+summary(fit)
+
+ggplot(heart.agg, aes(x=bmi, y=log.odds)) + 
+  geom_point() + 
+  geom_smooth(method="lm")
+```
+
+### Problem 7
+
+Use your fitted regression line from part 6 to predict the probability a randomly selected patient with a bmi of 27.5 will have heart disease
+
+**SOLUTION - MATH**
+
+$\log\left(\frac{p}{1-p}\right)$ is the log odds. If this equals some value (say $\hat{Y}$) we can perform algebra to get solve for $p$. Namely,
+$$p = \frac{\exp(\hat{Y})}{1+\exp(\hat{Y})}$$
+```{r}
+predicted.log.odds <- predict(fit, newdata=data.frame(bmi=27.5))
+exp(predicted.log.odds)/(1+exp(predicted.log.odds))
+```
+
+So we would predict the probability of a person with a bmi of 27.5 to have heart disease to be 0.3383575. 
+
+To demonstrate this appears to be a fairly legitimate answer, consider the initial plot with a red dot indicated our predicted probability.
+
+```{r}
+ggplot(heart.agg, aes(x=bmi, y=prop)) + 
+  geom_point() + 
+  geom_point(data=data.frame(bmi=27.5, prop=0.3383575), size=2, color="red")
+```
+
+
+
+

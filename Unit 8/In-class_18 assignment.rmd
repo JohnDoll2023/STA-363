@@ -1,0 +1,55 @@
+---
+title: "Class 18: Assignment"
+author: "John Doll"
+date: "Apr 1, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(tidyverse)
+library(ggfortify)
+library(gridExtra)
+library(knitr)
+```
+
+
+**Revisit the homicide data.**  Below we provide the code to create the `developed.country` data set that we saw in class when discussing leverage and influence:
+
+```{r}
+guns <- read.csv("firearmsMurderOwnership.csv")
+names(guns)[c(1,6,8)] <- c("Country", "Homicides", "Ownership")
+developed.country <- guns %>% select(Country, Homicides, Ownership)
+
+```
+
+*ANSWER THE FOLLOWING* with justification based on the output:
+
+----
+
+**Question 1**. Fit a model for Homicide rate as a function of Ownership and whether the Country/observation is the United States or not. Look at the example from last lecture about creating this dummy variable: you might consider `ifelse()` or `case_when()`. For this question, assess the residuals for the model you fit. *(A side note: by including a dummy variable for one (and only one) point, we guarantee a near perfect fit at that point. The coefficient on the USA effect literally explains the United States! This causes some confusion in R when calculating some values necessary for the plots.)*
+
+```{r}
+developed.country <- developed.country %>%
+  mutate(Country32 = (row_number() == 32))
+developed.country2 <- lm(Homicides ~ Ownership + Country32, data = developed.country)
+autoplot(developed.country2)
+```
+
+*The Residuals vs Fitted plot looks normal and the Residuals vs Leverage plot also appears fine, having no value above or below 3.*
+
+----
+
+**Question 2**. Perform an analysis on this model, interpreting the model output.
+
+```{r}
+summary(developed.country2)
+```
+
+*In our new model, it would appear that gun ownership is no longer a significant predictor of homicides (but only a tiny margin). However, our new variable, `Country32` would appear to be a significant predictor of homicides based on the $F$-stat of 79.43 on 2 and 29 degrees of freedom and a $p$-value of 2 x 10^-8^. Adding this variable makes the overall $p$-value much more significant, by 6 decimal places, and raises the adjsuted R squared by about .3.*
+
+----
+
+**Question 3**. How do you reconcile the difference in the effect of gun ownership on homicide rates between models where the US effect is included and when it isn't included?
+
+*Clearly, by making a variable that accounts for the United States, the model changes a lot. The slope of the new model flattens out compared to the model before that did not have an extra variable for the United States data. This also makes `Ownership` insignificant. So the US effect is very important on the data and should be accounted for.*

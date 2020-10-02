@@ -1,0 +1,22 @@
+---
+title: "Homework 1"
+author: "John Doll"
+date: "1/29/2020"
+output: html_document
+---
+```{r load-packages, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(ggfortify)
+library(gridExtra)
+library(emmeans)
+library(lindia)
+library(car)
+library(leaps)
+```
+
+```{r}
+Sys.info()
+sessionInfo()
+```
