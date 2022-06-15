@@ -1,0 +1,169 @@
+---
+title: "Homework 3"
+author: "John Doll"
+date: "2/19/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggfortify)
+library(emmeans)
+library(gridExtra)
+library(knitr)
+```
+
+# Problem 1
+
+```{r Species}
+species <- read.csv("benthicPopulations.csv")
+glimpse(species)
+```
+
+The data does not appear to need any cleaning or mutation.
+
+## EDA
+```{r}
+species %>%
+  group_by(Procedure) %>%
+  summarize(Mean = mean(Population),
+            SD = sd(Population),
+            Var = var(Population),
+            N = n() ) %>%
+  kable()
+
+ggplot(species) + 
+  geom_boxplot(aes(x=Procedure, y=Population), col="gray60" ) +
+  labs(x="Type of Procedure", y="Population") + 
+  theme_bw()
+```
+
+Based on the table and boxplot, we see a very large variation in means for the five different sampling procedures. Depletion and Modified Hess seem to have significantly larger means than Kicknet, SRK, and Surber. Also, we note the relatively larger standard deviations for all the procedures except for Kicknet. Kicknet's standard deviation is almost three times smaller than the next closest standard deviation. 
+
+## Assumptions Analysis
+
+```{r}
+species.anova <- aov(Population ~ Procedure, data = species)
+autoplot(species.anova)
+```
+
+The data appears to be normal and checks out just fine. There is a small upward slope in the Scale-Location plot but nothing too concerning.
+
+## Anova Model
+
+```{r}
+summary(species.anova)
+```
+
+Here, in our one-way anova, we see an $F$ = 9.015 statistic on 4 and 15 degrees of freedom, which is significantly different than the value of 1 due to the $p$-value = 0.000645. So we have evidence to suggest the different sampling procedures influence the population count. Now we must use a multiple comparisons test to determine which sampling procedures are statistically different.
+
+## Multiple Comparisons
+
+```{r}
+species.mc <- emmeans(species.anova, "Procedure")
+contrast(species.mc, "pairwise")
+confint(contrast(species.mc, "pairwise"))
+plot(confint(contrast(species.mc, "pairwise")))
+```
+
+We use Tukey's method because we are comparing all types of sampling procedures with each other, not with a control.
+From this multiple comparisons test, we can conclude with 95% confidence that:
+
+* the Kicknet sampling procedure has a mean population that is between -75.172 and -10.8 units lower than the Modified Hess sampling procedure.
+* the Depletion sampling procedure has a mean population that is between 7.828 and 72.2 units larger than the Surber sampling procedure.
+* the Depletion sampling procedure has a mean population that is between 5.578 and 69.9 units larger than the SRK sampling procedure.
+
+The difference in other sampling procedures was not significant.
+
+# Problem 2
+
+```{r Gas}
+gas <- read.csv("vehicleMPG.csv")
+glimpse(gas)
+```
+
+The data does not appear to need any cleaning or mutation.
+
+## EDA
+
+```{r}
+ggplot(gas) +
+  geom_line(aes(x = Brand, y = MPG, col = Model, group = Model)) +
+  labs(x="Brand of Gasoline", y="Miles Per Gallon") + 
+  theme_bw()
+```
+
+Clearly, auotmobile Model B appears to have much lower gas mileage, no matter the brand of gasoline. In general, gasoline C appears to be more efficient than gasoline B, which appears to be more efficient than gasoline B. The most variance in fuel efficieny comes in gasoline A, while the least amount of variance seems to be in gasoline C.
+
+## Assumptions Analysis
+
+```{r}
+gas.anova <- aov(MPG ~ Model + Brand, data = gas)
+autoplot(gas.anova)
+```
+
+Well, the data does not look great. The Residuals vs Factor Levels plot is converging, the Residuals vs Fitted plot is a little rickety, the Scale-Location chart takes a bit of a dive on the right side of the graph, and the normal Q-Q plot has a couple dots off the normality line. One of these graphs by themselves would not be too concerning, but all four do bring up concern. We will continue in our analysis, but with much caution. 
+
+## Anova Model
+
+```{r}
+summary(gas.anova)
+```
+
+Based on the blocked one-way anova, both the brand and model appear to have a significant effect on the gas mileage. From the prompt though, we only care about the significant difference between brands of gasoline. We need to perform a multiple comparisons test to find out which brands (if any) have a significant effect.
+
+## Multiple Comparisons
+
+```{r}
+gas.mc <- emmeans(gas.anova, "Brand")
+contrast(gas.mc, "pairwise")
+confint(contrast(gas.mc, "pairwise"))
+plot(confint(contrast(gas.mc, "pairwise")))
+```
+
+We use Tukey's method since we are comparing all gasoline brands, we do not have a baseline or control group. From our multiple comparison test, and with much caution, we can conclude with 95% confidence that:
+
+* brand A of gasoline has a mean miles per gallon that is between -5.79 and -0.956 miles per gallon smaller than brand C of gasoline
+
+There is no significant difference between the other types of gasoline.
+
+# Problem 3
+
+```{r}
+corrosion <- read.csv("corrosionFatigue.csv")
+corrosion <- corrosion %>%
+  filter(Stress == 13000) %>%
+  mutate(Humidity=factor(Humidity, levels=c("Low", "Medium", "High")))
+kable(head(corrosion))
+```
+
+From the prompt, it asks us to only find how Chromated coating and Humidity level influence the fatigue for a fixed Shear Stress level of 13000 psi, so we filter our data to get rid of any data when the Shear Stress level is not 13000 psi.
+
+## EDA
+```{r}
+ggplot(corrosion, aes(x=Coating,y=Fatigue, color=Humidity, group=Humidity))  + 
+  stat_summary(fun.y=mean, geom="point") +
+  stat_summary(fun.y=mean, geom="line") + 
+  labs(y="Fatigue Damage") + 
+  theme_bw()
+```
+
+Very clearly we can see that medium humidity has a large effect on the chromated metals, making them have much more corrosion fatigue damage (CFD). Low and High humidity chromated metals do not differ much though. Also, uncoated metals seem to all have similar CFD no matter the humidity.
+
+## Assumptions Analysis
+ 
+```{r}
+corrosion.anova <- aov(Fatigue ~ Coating + Humidity + Coating:Humidity, data = corrosion)
+autoplot(corrosion.anova)
+```
+
+The Scale-Location plot looks a little bit messy and has some up and down variation but nothing of too much concern. All other plots are just fine and we will move forward with our analysis.
+
+## Anova Model
+
+```{r}
+summary(corrosion.anova)
+```
+
+Based on our two-way anova output, none of either coating, humitdity, or the interaction between coating and humidity have a significant effect on the CFD. Humidity and the interaction between coating and humidity have low $p$-values which suggest possible influence, but from our generally accepted $p$-value cutoff of 0.05, neither of them are significant. No multiple comparisons are needed and our analysis is finished.

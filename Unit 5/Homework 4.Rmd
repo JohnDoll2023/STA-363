@@ -1,0 +1,167 @@
+---
+title: "Homework 4"
+author: "John Doll"
+date: "2/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(GGally)
+library(lindia)
+library(ggfortify)
+library(emmeans)
+```
+
+# Problem 1
+
+## Question 1
+
+This is a blocked two-way anova. The block is the pain tolerance. 
+
+## Question 2
+
+Pain tolerance should be considered because that could affect the pain relief response variable. People with a very high pain tolerance might have a lesser affect from the treatment that they are given. If we did not block for this, there would be more variability among our results due to range in pain tolerance of the subjects.
+
+## Question 3
+
+```{r}
+pain <- read.csv("dentalPainData.csv")
+glimpse(pain)
+pain <- pain %>%
+  mutate(PainTolerance = as.factor(PainTolerance)) %>%
+  pivot_longer(c(PI, PA, CI, CA), names_to = "Treatment", values_to = "PainRelief") %>%
+  mutate(Codeine = as.factor(case_when(Treatment == "CI" ~ "True",
+                                       Treatment == "CA" ~ "True",
+                                       TRUE ~ "False")),
+         Acupuncture = as.factor(case_when(Treatment == "PA" ~ "True",
+                                           Treatment == "CA" ~ "True",
+                                           TRUE ~ "False")))
+pain
+```
+
+Here, we mutate the variables to their proper type, switch the direction of the data from wide to long,  and add two variables to better analyze the data.
+
+## Question 4
+
+```{r}
+ggplot(pain) +
+  geom_line(aes(x = Treatment, y = PainRelief, col = PainTolerance, group = PainTolerance)) +
+  labs(x = "Type of Treatment", y = "Pain Relief Score") +
+  ggtitle("Pain Relief based on type of Treatment applied and Pain Tolerance group") +
+  theme_bw()
+```
+
+Our data goes from left to right with codeine and acupuncture in effect, then just codeine, then just acupuncture, and finally, neither. From this graph it would appear that the codeine with the acupuncture has the greatest effect on pain relief score and that the absense of both has the least effect.
+
+## Question 5
+
+```{r}
+pain.anova <- aov(PainRelief ~ PainTolerance + Codeine*Acupuncture, data = pain)
+autoplot(pain.anova)
+```
+
+The Residuals vs Fitted plots seems alright, it has a dip but it goes back up to nornal. The Residuals vs Factor Levels and Scale Location plots look pretty good. The normal Q-Q plot looks very normal and not of concern.
+
+```{r}
+summary(pain.anova)
+```
+
+Looking at the highest order of comparison first:
+
+* `Codeine:Acupuncture`: The effect of codeine does not significantly affect pain relief as acupuncture is factored in ($F$-stat = 0.213 on 1 and 28 degrees of freedom, $p$-value = 0.647632).
+
+Then at the lower order comparisons:
+
+* `Acupuncture`: The effect of acupuncture significantly affects pain relief ($F$-stat = 233.679 on 1 and 21 degrees of freedom, $p$-value = 7.47 x 10^-13^).
+* `Codeine`: The effect of codeine significantly affects pain relief ($F$-stat = 159.79 on 1 and 21 degrees of freedom, $p$-value = 7.47 x 10^-11^).
+* `PainTolerance` The effect of pain tolerance significantly affects pain relief ($F$-stat = 55.296 on 7 and 21 degrees of freedom, $p$-value = 4.13 x 10^-12^).
+
+## Question 6
+
+No multiple comparisons are need because each of Codeine and Acunpuncture has only two options to it, so we know that the difference between those two options for each variable must be significant. We also expect there to be a difference in Pain Tolerance groups already, that is why we blocked them so we don't do multiple comparisons there either.
+
+```{r}
+pain.summary <- pain %>%
+  group_by(Codeine, PainTolerance) %>%
+  summarise(Mean = mean(PainRelief),
+            SE = sd(PainRelief)/sqrt(length(PainRelief)))
+ggplot(pain.summary, aes(x = PainTolerance, y = Mean, colour = Codeine)) +
+  geom_line(aes(group = Codeine)) +
+  labs(x = "Pain Tolerance Group", y = "Pain Relief Score") +
+  ggtitle("Effects of Codeine on Pain Relief")
+```
+
+From this graph we can easily note that taking codeine results in higher pain relief scores than not taking codeine for each pain tolerance group.
+
+```{r}
+pain.summary2 <- pain %>%
+  group_by(Acupuncture, PainTolerance) %>%
+  summarise(Mean = mean(PainRelief),
+            SE = sd(PainRelief)/sqrt(length(PainRelief)))
+ggplot(pain.summary2, aes(x = PainTolerance, y = Mean, colour = Acupuncture)) +
+  geom_line(aes(group = Acupuncture)) +
+  labs(x = "Pain Tolerance Group", y = "Pain Relief Score") +
+  ggtitle("Effects of Acupuncture on Pain Relief")
+```
+
+From this graph we can very clearly see that doing acupuncture results in higher pain relief scores than not doing acupuncture for each pain tolerance group.
+
+# Problem 2
+
+## Question 1
+
+```{r}
+home <- read.csv("homePrices.csv")
+ggscatmat(home)
+```
+
+From the scatter plot matrix, there do not appear to be any clear or obvious patterns, be it linear or quadratic. The correlation values echo this claim since the strongest correlation is only .54.
+
+## Question 2 and 3
+
+```{r}
+home1 <- lm(Price ~ Floor + Bed + Age + Garage, data = home)
+summary(home1)
+autoplot(home1)
+```
+
+In the Residuals vs Fitted plot, the line looks relatively linear but the y-value range spans from -100 to 100 which raises some concern. The normal Q-Q line looks alright except at the bottom where the values seem to taper away from the normality line.
+
+## Question 4
+
+```{r}
+gg_boxcox(home1)
+```
+
+The optimal suggested $\lambda$ is 0.1.
+
+## Question 5
+
+```{r}
+home2 <- lm(log(Price) ~ Floor + Bed + Age + Garage, data = home)
+summary(home2)
+autoplot(home2)
+```
+
+## Question 6
+
+Yes, they have been alleviated because the y-value range is now from 0.25 and -0.50. The normal Q-Q plot appears to be normal now, the data points have been pushed closer to the line in the new analysis.
+
+## Question 7
+
+* The $\beta$-coefficient estimate for the predictor here is $b_{0} = 5.3321$. A home with 0 square footage, 0 beds, built in the current year, and has no garage will have a price of 10^5.33251^ = $215,035
+* The $\beta$-coefficient estimate for the predictor here is $b_{1} = 0.22875$. For each additional unit of `Floor`, we expect that the log of `Price` will increase by 0.22875.
+* The $\beta$-coefficient estimate for the predictor here is $b_{2} =-0.08256$. For each additional unit of `Bed`, we expect that the log of `Price` will decrease by 0.08256.
+* The $\beta$-coefficient estimate for the predictor here is $b_{3} = -0.01309$. For each additional unit of `Age`, we expect that the log of `Price` will decrease by 0.01309.
+* The $\beta$-coefficient estimate for the predictor here is $b_{4} = 0.0854$. For each additional unit of `Garage`, we expect that the log of `Price` will increase by 0.0854.
+
+## Question 8
+
+It does significantly predict the log price of homes in Eugene, Oregon from the $F$-statistic of 5.148 on 4 and 71 degrees of freedom with a $p$-value of 0.00164. We see that a combination of floor area, number of bedrooms, age of the home, and garage space accounts explains about 18.12% of the variability of log price of homes.
+
+## Question 9
+
+5.33251 + 0.22875(1.9) - 0.08256(3) - 0.01309((1975-1970)/10) + 0.0854(2) = 5.68371, 10^5.68371^ = $482,736

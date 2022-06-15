@@ -1,0 +1,200 @@
+---
+title: 'HW #7'
+author: "John Doll"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+library(knitr)
+library(ggfortify)
+library(lindia)
+library(leaps)
+library(car)
+library(caret)
+```
+
+```{r}
+load("hockeyData.RData")
+ls()
+```
+
+# Part 1 - Odds
+
+## Question 1
+
+Is there a home-ice advantage? Compute the odds the home team wins and discuss whether this implies there is a home ice advantage in the NHL?
+
+```{r}
+glimpse(hockey_train)
+xtabs(~ hometeam_wins, data = hockey_train)
+```
+
+### Answer
+
+The odds that the home team wins is (4059/3343) = 1.214.
+
+
+## Question 2
+
+Does any home-ice advantage get mitigated when a game goes to overtime or in a shootout? Compute the odds the home team wins in regulation, overtime or a shootout. Compare these values to address the question.
+
+```{r}
+xtabs(~ hometeam_wins + game_finished, data = hockey_train)
+```
+
+### Answer
+
+The odds that the home team wins in 
+
+* regulation is (3143/2476) = 1.269
+* overtime is (505/446) = 1.132
+* shootout is (411/421) = 0.9762
+
+While the odds are greatest for the home team to win in regulation. and 2nd greatest for overtime, the odds are slightly in favor of the away team in a shootout. So from this, it would appear that home-ice advantage is mitigated when the game goes to a shoot-out, and the home-ice advantage is weakened when the game goes to overtime.
+
+# Part 2 EDA and basic question
+
+## Question 3
+
+Build a plot to explore how the difference between home and away shots on goal predicts whether the home team wins. Briefly discuss the results of your plot.
+
+### Answer
+
+```{r}
+ggplot(hockey_train) +
+  geom_density(aes(Shot_diff, fill = hometeam_wins))
+```
+
+From my plot it would appear that the shot differential does not play a major role in whether or not the home team won the game.
+
+
+## Question 4
+
+Build a simple logistic model to statistically determine if the difference in shots on goal predicts the probability the home team wins.
+
+### Answer
+
+```{r}
+shots.fit <- glm(hometeam_wins ~ Shot_diff, data = hockey_train, family = binomial(link = logit))
+summary(shots.fit)
+drop1(shots.fit, test = "Chisq")
+```
+
+Based on the Wald z-test in the model, and on the Likelihood Ratio Chi-Square tests, the shot difference is not significant. ($\chi^2$ = 0.0325, df = 1, $p$-value = 0.8568)
+
+
+
+# Part 3 - Multiple Logistic Models
+
+## Question 5
+
+Fit a multiple logistic regression model with difference in shots, hits PIMs, PPOs, giveways, takeaways and home teams faceoff win percentage to predict the probability the home team wins. Statistically test if `Shot_diff` is a significant predictor when these other variables are in the model.
+
+### Answer
+
+```{r}
+full.fit <- glm(hometeam_wins ~ Shot_diff + Hit_diff + PIM_diff + PPO_diff + Giveaway_diff + Takeaway_diff + home_faceoff, data = hockey_train, binomial(link = logit))
+summary(full.fit)
+drop1(full.fit, test = "Chisq")
+```
+
+In the `full.fit`, `Shot.diff` is significant by the z-test and the $\chi^2$ test ($\chi^2$ = 12.053, df = 1, $p$-value = 0.000517)
+
+## Question 6
+
+You should note that the `Shot_diff` variable is significant predictor when other variables are in the model; what could cause that? Compare/constrast with other topics we discussed in this class. 
+
+### Answer
+
+The relationship between the variables that have been added helps R (and us) to find how several predictors affect the outcome, which can reveal significant variables that would not have been significant on their own.
+
+
+## Question 7
+
+Note that the `home_faceoff` is not significant in your model above, refit the model with the reduction of the `home_faceoff` variable and interpret the intercept of the fitted model. Compare this intercept to the findings in the first question of Part 1.
+
+### Answer
+
+```{r}
+full.fit.face <- glm(hometeam_wins ~ Shot_diff + Hit_diff + PIM_diff + PPO_diff + Giveaway_diff + Takeaway_diff, data = hockey_train, binomial(link = logit))
+summary(full.fit.face)
+```
+
+The intercept is 0.201071 which is positive. The odds is `r exp(coef(full.fit.face)[1])` which means that the probability of the home team winning when all other constants are zero is `r exp(coef(full.fit.face)[1])/(1+exp(coef(full.fit.face)[1]))`. This is very similar to the odds from the first part which were 1.214.
+
+## Question 8
+
+Consider the model above (without the faceoff win percentage as a predictor), does the addition of the factor variable `game_finished` significantly improve the model? Justify with an appropriate statistical methods. 
+
+### Answer
+
+```{r}
+full.fit.finish <- glm(hometeam_wins ~ Shot_diff + Hit_diff + PIM_diff + PPO_diff + Giveaway_diff + Takeaway_diff + game_finished, data = hockey_train, binomial(link = logit))
+anova(full.fit.finish, full.fit.face, test = "LRT")
+```
+
+Yes, the addition of `game_finished` does significantly improve the model ($p$-value = 0.00216).
+
+## Question 9
+
+For the model with `game_finished` added and without faceoff win percentage, interpret the coefficients for the intercept, `game_finishedOvertime` and `game_finishedShootout` variables. Compare/contrast these findings to that in the second question of Part 1.
+
+### Answer
+
+```{r}
+summary(full.fit.finish)
+```
+
+The coefficient for the intercept is 0.242113 which is positive. The odds is `r exp(coef(full.fit.finish)[1])` which means that the probability of the home team winning when all other constants are zero is `r exp(coef(full.fit.finish)[1])/(1+exp(coef(full.fit.finish)[1]))`. The odds from our model are similar to the odds from the data which was 1.269.
+
+The coefficient for `game_finishedOvertime` is -0.104484 which is negative. The odds is `r exp(coef(full.fit.finish)[8])` which means that the probability of the home team winning when all other constants are zero is `r exp(coef(full.fit.finish)[8])/(1+exp(coef(full.fit.finish)[8]))`. The odds from our model are less than the odds from the data which was 1.132 and actual sway so that the odds of the away team winning are greater than the home team.
+
+The coefficient for `gamefinishedShootout` is -0.257653 which is negative. The odds is `r exp(coef(full.fit.finish)[9])` which means that the probability of the home team winning when all other constants are zero is `r exp(coef(full.fit.finish)[9])/(1+exp(coef(full.fit.finish)[9]))`. The odds from our model are lower than the odds from the data which was 0.9762, which is still in favor of the away team winning.
+
+## Question 10
+
+Compare the three fitted models in this section (in questions 5, 7 and 8) via AIC, which do you prefer (justify).
+
+### Answer
+
+The model in question 5 had an AIC of 9752, the model in question 7 had an AIC of 9751, the model in question 8 had an AIC of 9742.8. Based on this comparison, I would prefer the model from question 8 because it has a lower AIC than the other two models. Going further, it also had the lowest residual deviance at 9724.8 on 7393 degrees of freedom.
+
+# Part 4 - Prediction
+
+## Question 11
+
+We will use the model you deemed best in question 10 above to predict the outcome of all games in the `hockey_test` data. Edit the code chunk in below to use your selected model and explain what that piece of code is doing.  Remember to uncomment the code!
+
+```{r}
+hockey_test <- hockey_test %>%
+   mutate(Win_prob = predict(full.fit.finish,
+                             newdata=hockey_test,
+                             type="response"),
+          Pred_wins = Win_prob >= 0.5)
+```
+
+### Answer
+
+We add a variable called `Win_prob` which saves the unlogged probability prediction of my model using the test data. It creates another variable named `Pred_wins` which sorts if the home team is predicted to win or not based on if the `Win_prob` variable is 0.5 or greater.
+
+## Question 12
+
+Calculate and discuss the accuracy, sensitivity and specificity of your chosen model to predict the home team winning ability for the testing set.
+
+### Answer
+
+```{r}
+xtabs(~ Pred_wins + hometeam_wins, data = hockey_test)
+```
+
+Accuracy: (602+255)/1355 = .632 Accuracy would be how often the model correctly predicts the correct result. The accuracy for this model is 0.632 meaning that the model should correctly predict the outcome of the game about 6 times out of 10.
+
+Sensitivity: (602/756) = .796 Sensitivity is used to judge the model's rate of predicting wins correctly. This model has a sensitivity of 0.796 meaning that it is decently reliable when it predicts a game to be a win, a true positive.
+
+Specificity: (255/599) = .426 Specificity is used to test that the model correctly predicts the home team lost. This model's specificity is relatively low meaning that when it predicts that the home team loses, we cannot be too confident in the model's prediction.
+
+
